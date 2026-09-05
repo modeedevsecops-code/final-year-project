@@ -184,11 +184,11 @@ $alerts_res = mysqli_query(
 <body>
     <?php include 'inc/navbar.php'; ?>
 
-    <main class="main" id="top">
-        <div class="container py-5 mt-4">
+    <main class="main-content" id="top">
+        <div class="container py-5">
 
             <!-- Header -->
-            <div class="d-flex justify-content-between align-items-center mb-4 mt-5">
+            <div class="d-flex justify-content-between align-items-center mb-4">
                 <div>
                     <h3 class="mb-0 fw-bold text-danger">📊 BloodLink Reports &amp; Analytics</h3>
                     <p class="text-muted small mb-0">Overview of blood donations, donor activity, and hospital

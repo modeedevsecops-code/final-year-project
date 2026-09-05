@@ -1,5 +1,9 @@
 <?php
 session_start();
+
+// Force the plain visitor navbar on this page, even if logged in
+$forceVisitorNav = true;
+
 include 'inc/header.php';
 ?>
 <!DOCTYPE html>

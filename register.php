@@ -1,5 +1,7 @@
 <?php
 session_start();
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 include 'inc/header.php';
 ?>
 <!DOCTYPE html>
@@ -35,6 +37,14 @@ include 'inc/header.php';
                                     </small>
                                 </div>
 
+                                <script>
+                                function toggleRegisterFields() {
+                                    const role = document.getElementById('registerRoleSelect').value;
+                                    document.getElementById('donorRegisterDiv').style.display = (role === 'donor') ? 'block' : 'none';
+                                    document.getElementById('recipientRegisterDiv').style.display = (role === 'recipient') ? 'block' : 'none';
+                                }
+                                </script>
+
                                 <!-- Donor Registration Form Container -->
                                 <div id="donorRegisterDiv" style="display:none;">
                                     <?php include 'register_donor.php'; ?>
@@ -51,15 +61,6 @@ include 'inc/header.php';
             </div>
         </section>
     </main>
-
-    <script>
-    function toggleRegisterFields() {
-        const role = document.getElementById('registerRoleSelect').value;
-        
-        document.getElementById('donorRegisterDiv').style.display = (role === 'donor') ? 'block' : 'none';
-        document.getElementById('recipientRegisterDiv').style.display = (role === 'recipient') ? 'block' : 'none';
-    }
-    </script>
 
     <?php include 'inc/main_js.php'; ?>
 </body>

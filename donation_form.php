@@ -9,24 +9,15 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
 }
 
 $student_id = $_SESSION['user_id'];
-$dbb = new operations();
+$ops = new operations();
 
-// Handle donation submission
-if (isset($_POST['submit_logbook'])) {
-    $date       = $_POST['entry_date'];
-    $activities = $_POST['activities'];
+// Reuse the real eligibility logic already used by match_donor.php
+$check = mysqli_query($db->connection, "SELECT last_donation_date FROM students WHERE student_id = '" . intval($student_id) . "'");
+$donor_row = $check ? mysqli_fetch_assoc($check) : null;
 
-    if ($dbb->add_logbook_entry($student_id, $date, $activities)) {
-        $success = "Blood donation record submitted successfully.";
-    } else {
-        $error = "Failed to submit donation record.";
-    }
-}
-
-// Fetch existing donation records
-$entries = $dbb->get_student_logbook($student_id);
+$is_eligible = $donor_row ? $ops->is_donor_eligible($donor_row['last_donation_date']) : false;
+$days_remaining = $donor_row ? $ops->days_until_eligible($donor_row['last_donation_date']) : 0;
 ?>
-
 <!DOCTYPE html>
 <html lang="en-US">
 <body>
@@ -35,91 +26,31 @@ $entries = $dbb->get_student_logbook($student_id);
 
 <div class="container py-5 mt-5">
 
-    <h3 class="mb-4 text-center">Blood Donation Form</h3>
-    <p class="text-center text-muted">
-      Submit your blood donation record accurately. Your record will be reviewed by your assigned hospital officer.
-    </p>
+    <h3 class="mb-4 text-center">Donate Blood</h3>
 
-    <!-- Alerts -->
-    <?php if (!empty($success)): ?>
-        <div class="alert alert-success text-center"><?php echo $success; ?></div>
-    <?php endif; ?>
-    <?php if (!empty($error)): ?>
-        <div class="alert alert-danger text-center"><?php echo $error; ?></div>
-    <?php endif; ?>
-
-    <!-- Donation Form -->
     <div class="card mb-4">
-        <div class="card-body">
-            <form method="post">
+        <div class="card-body text-center">
 
-                <div class="mb-3">
-                    <label class="form-label">Donation Date</label>
-                    <input type="date"
-                           name="entry_date"
-                           class="form-control"
-                           required>
+            <?php if ($is_eligible): ?>
+                <div class="alert alert-success">
+                    <h4 class="mb-1">You are currently eligible to donate</h4>
+                    <p class="mb-0">A hospital officer will match you to a compatible blood request and confirm the donation when one comes in.</p>
                 </div>
-
-                <div class="mb-3">
-                    <label class="form-label">Donation Details / Health Notes</label>
-                    <textarea name="activities"
-                              class="form-control"
-                              rows="5"
-                              placeholder="e.g. Blood type O+, donated 450ml at St. Luke Hospital. No adverse reactions noted..."
-                              required></textarea>
+            <?php else: ?>
+                <div class="alert alert-warning">
+                    <h4 class="mb-1">Not yet eligible</h4>
+                    <p class="mb-0">Based on your last donation, you'll be eligible again in <strong><?php echo (int)$days_remaining; ?> day(s)</strong>. This follows the standard 56-day donation interval.</p>
                 </div>
+            <?php endif; ?>
 
-                <button type="submit"
-                        name="submit_logbook"
-                        class="btn btn-danger">
-                    Submit Donation Record
-                </button>
+            <p class="text-muted mt-3">
+                You don't need to do anything else right now &mdash; donation records are created and verified
+                by your assigned hospital officer once you're matched to a request. You can check your
+                donation history any time from your <a href="donor_dashboard.php">Dashboard</a>.
+            </p>
 
-            </form>
         </div>
     </div>
-
-    <!-- Donation History -->
-    <h5 class="mb-3">My Donation History</h5>
-
-    <?php if (mysqli_num_rows($entries) === 0): ?>
-        <div class="alert alert-info">No donation records submitted yet.</div>
-    <?php else: ?>
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped">
-                <thead class="table-light">
-                    <tr>
-                        <th>Date</th>
-                        <th>Donation Details / Health Notes</th>
-                        <th>Status</th>
-                        <th>Officer Comment</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php while ($row = mysqli_fetch_assoc($entries)): ?>
-                    <tr>
-                        <td><?php echo htmlspecialchars($row['entry_date']); ?></td>
-                        <td><?php echo nl2br(htmlspecialchars($row['activities'])); ?></td>
-                        <td>
-                            <span class="badge bg-<?php
-                                echo $row['status'] === 'approved' ? 'success' :
-                                     ($row['status'] === 'rejected' ? 'danger' : 'warning');
-                            ?>">
-                                <?php echo ucfirst($row['status']); ?>
-                            </span>
-                        </td>
-                        <td>
-                            <?php echo $row['supervisor_comment']
-                                ? htmlspecialchars($row['supervisor_comment'])
-                                : '—'; ?>
-                        </td>
-                    </tr>
-                <?php endwhile; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
 
 </div>
 

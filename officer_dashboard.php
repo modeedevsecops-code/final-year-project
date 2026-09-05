@@ -5,12 +5,12 @@ if (session_status() === PHP_SESSION_NONE) {
 include 'inc/header.php';
 
 // Redirect if not an officer
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'officer') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'supervisor') {
     header("Location: login.php");
     exit();
 }
 
-$officer_name = $_SESSION['user_name'] ?? 'Hospital Officer';
+$officer_name = $_SESSION['name'] ?? 'Hospital Officer';
 ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">

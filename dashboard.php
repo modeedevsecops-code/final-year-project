@@ -1,80 +1,107 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
-require_once 'config/db.php';
-require_once 'inc/header.php';
+session_start();
+require_once 'config/db.php'; // adjust path if your db include has a different name/location
 
-// Only admins allowed
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: login.php");
     exit();
 }
+
+// --- Helper: safe count query (won't crash if a table/query fails) ---
+function safe_count($db, $sql) {
+    $result = $db->connection->query($sql);
+    return $result ? ($result->fetch_assoc()['c'] ?? 0) : 0;
+}
+
+// --- Summary stats (using real table names from donor_app.sql) ---
+$total_donors     = safe_count($db, "SELECT COUNT(*) AS c FROM students");
+$total_officers   = safe_count($db, "SELECT COUNT(*) AS c FROM staff");
+$pending_requests = safe_count($db, "SELECT COUNT(*) AS c FROM blood_requests WHERE status = 'Pending'");
+
+$active_alerts = safe_count($db, "SELECT COUNT(*) AS c FROM stock_alerts WHERE status = 'active'");
+
+// --- Recent activity: last 5 blood requests ---
+$recent = $db->connection->query("SELECT * FROM blood_requests ORDER BY created_at DESC LIMIT 5");
+$recent_requests = $recent ? $recent->fetch_all(MYSQLI_ASSOC) : [];
+
+$adminName = $_SESSION['user_name'] ?? 'Admin';
+
+include 'inc/header.php';
+include 'inc/navbar.php';
 ?>
-<!DOCTYPE html>
-<html lang="en-US" dir="ltr">
-<head>
-    <title>BloodLink | Admin Dashboard</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-<body>
-<?php include 'inc/navbar.php'; ?>
 
-<div class="container py-5 mt-5">
+<div class="main-content">
 
-    <div class="row g-4">
-
-        <div class="col-md-4">
-            <div class="card h-100 border-danger text-center p-4">
-                <div class="mb-3 text-danger"><i class="fas fa-tint fa-2x"></i></div>
-                <h5 class="fw-bold">Blood Donors</h5>
-                <a href="manage_donors.php" class="btn btn-danger mt-3">Manage Donors</a>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100 border-danger text-center p-4">
-                <div class="mb-3 text-danger"><i class="fas fa-user-md fa-2x"></i></div>
-                <h5 class="fw-bold">Hospital Officers</h5>
-                <a href="manage_officers.php" class="btn btn-danger mt-3">Manage Officers</a>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100 border-danger text-center p-4">
-                <div class="mb-3 text-danger"><i class="fas fa-bell fa-2x"></i></div>
-                <h5 class="fw-bold">Emergency Alerts</h5>
-                <a href="notices.php" class="btn btn-danger mt-3">Manage Alerts</a>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100 border-primary text-center p-4">
-                <div class="mb-3 text-primary"><i class="fas fa-map-marker-alt fa-2x"></i></div>
-                <h5 class="fw-bold">Geo-Location Map</h5>
-                <a href="geo_map.php" class="btn btn-primary mt-3">View Map</a>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100 border-danger text-center p-4">
-                <div class="mb-3 text-danger"><i class="fas fa-hand-holding-medical fa-2x"></i></div>
-                <h5 class="fw-bold">Blood Requests</h5>
-                <a href="blood_requests.php" class="btn btn-danger mt-3">View Requests</a>
-            </div>
-        </div>
-
-        <div class="col-md-4">
-            <div class="card h-100 border-success text-center p-4">
-                <div class="mb-3 text-success"><i class="fas fa-chart-line fa-2x"></i></div>
-                <h5 class="fw-bold">Reports &amp; Analytics</h5>
-                <a href="reports.php" class="btn btn-success mt-3">View Report</a>
-            </div>
-        </div>
-
+    <!-- Welcome Banner (same style as donor dashboard) -->
+    <div class="welcome-banner">
+        <span class="badge-pill">DASHBOARD OVERVIEW</span>
+        <h1>Welcome back, <?= htmlspecialchars($adminName) ?>!</h1>
+        <p>Monitor donors, hospital officers, blood requests, and stock levels from one place.</p>
     </div>
-</div>
 
-<?php include 'inc/main_js.php'; ?>
-</body>
-</html>
+    <!-- Stat cards row -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3 col-sm-6">
+            <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-tint"></i></div>
+                <h3><?= $total_donors ?></h3>
+                <p>Total Donors</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-user"></i></div>
+                <h3><?= $total_officers ?></h3>
+                <p>Hospital Officers</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-clock"></i></div>
+                <h3><?= $pending_requests ?></h3>
+                <p>Pending Requests</p>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="quick-card">
+                <div class="quick-icon" style="<?= $active_alerts > 0 ? 'background:#fde2e2;color:#d32f2f;' : '' ?>">
+                    <i class="fas fa-bell"></i>
+                </div>
+                <h3 style="<?= $active_alerts > 0 ? 'color:#d32f2f;' : '' ?>"><?= $active_alerts ?></h3>
+                <p>Low Stock Alerts</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent activity -->
+    <div class="quick-card" style="text-align:left;">
+        <h3 style="margin-bottom:1rem;">Recent Blood Requests</h3>
+        <div style="overflow-x:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+            <thead>
+                <tr style="background:#f9f9f9; text-align:left;">
+                    <th style="padding:10px; font-size:0.85rem; color:#6c757d;">Blood Group</th>
+                    <th style="padding:10px; font-size:0.85rem; color:#6c757d;">Patient</th>
+                    <th style="padding:10px; font-size:0.85rem; color:#6c757d;">Hospital</th>
+                    <th style="padding:10px; font-size:0.85rem; color:#6c757d;">Status</th>
+                    <th style="padding:10px; font-size:0.85rem; color:#6c757d;">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                <?php if (empty($recent_requests)): ?>
+                <tr><td colspan="5" style="padding:10px; color:#888;">No recent requests.</td></tr>
+                <?php else: foreach ($recent_requests as $r): ?>
+                <tr style="border-bottom:1px solid #f0f0f0;">
+                    <td style="padding:10px;"><span class="badge-pill" style="background:#fdeaea;color:#7a0000;"><?= htmlspecialchars($r['blood_group']) ?></span></td>
+                    <td style="padding:10px;"><?= htmlspecialchars($r['patient_name']) ?></td>
+                    <td style="padding:10px;"><?= htmlspecialchars($r['hospital_name']) ?></td>
+                    <td style="padding:10px;"><?= htmlspecialchars($r['status']) ?></td>
+                    <td style="padding:10px; color:#6c757d; font-size:0.9rem;"><?= htmlspecialchars($r['created_at']) ?></td>
+                </tr>
+                <?php endforeach; endif; ?>
+            </tbody>
+        </table>
+        </div>
+    </div>
+
+</div>

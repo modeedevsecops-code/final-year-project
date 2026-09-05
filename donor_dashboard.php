@@ -45,59 +45,60 @@ $donorId  = $student['reg_no'] ?? $_SESSION['reg_no'] ?? 'N/A';
       <!-- ============================================-->
       <!-- Donor Dashboard Section -->
       <!-- ============================================-->
-      <section class="pt-5 pt-md-6">
-        <div class="container">
+      <div class="main-content">
+        <div class="container-fluid">
 
-          <div class="text-center mb-5">
-            <h1 class="mb-2">Donor Dashboard</h1>
-            <p class="text-muted">
-              Welcome <strong><?php echo htmlspecialchars($userName); ?></strong>
-              &nbsp;|&nbsp; Donor ID: <strong><?php echo htmlspecialchars($donorId); ?></strong>
-            </p>
-            <p class="text-muted">
-              Access your blood donation form, donation history, assigned hospital officer,
-              and nearby blood bank locations.
-            </p>
+          <!-- Welcome Banner -->
+          <div class="welcome-banner">
+            <span class="badge-pill">DASHBOARD OVERVIEW</span>
+            <h1>Welcome back, <?php echo htmlspecialchars($userName); ?>!</h1>
+            <p>Donor ID: <strong><?php echo htmlspecialchars($donorId); ?></strong> &nbsp;|&nbsp; Access your donation form, donation history, assigned officer, and nearby blood banks.</p>
           </div>
 
+          <!-- Quick Action Cards -->
           <div class="row g-4">
 
-            <div class="col-md-4">
-              <div class="card h-100 border-danger text-center p-3">
+            <div class="col-md-4 col-sm-6">
+              <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-tint"></i></div>
                 <h3>Donate Blood</h3>
-                <p class="text-muted">Submit a new blood donation record at your nearest blood bank.</p>
+                <p>Submit a new blood donation record at your nearest blood bank.</p>
                 <a href="donation_form.php" class="btn btn-danger mt-auto">Donate Now</a>
               </div>
             </div>
 
-            <div class="col-md-4">
-              <div class="card h-100 border-primary text-center p-3">
+            <div class="col-md-4 col-sm-6">
+              <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-user-md"></i></div>
                 <h3>My Hospital Officer</h3>
-                <p class="text-muted">View your assigned hospital officer and their contact details.</p>
-                <a href="my_officer.php" class="btn btn-primary mt-auto">View Officer</a>
+                <p>View your assigned hospital officer and their contact details.</p>
+                <a href="my_officer.php" class="btn btn-outline-danger mt-auto">View Officer</a>
               </div>
             </div>
 
-            <div class="col-md-4">
-              <div class="card h-100 border-danger text-center p-3">
+            <div class="col-md-4 col-sm-6">
+              <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-bell"></i></div>
                 <h3>Emergency Alerts</h3>
-                <p class="text-muted">View urgent blood requests posted by hospital officers near you.</p>
+                <p>View urgent blood requests posted by hospital officers near you.</p>
                 <a href="emergency_alerts.php" class="btn btn-danger mt-auto">View Alerts</a>
               </div>
             </div>
 
-            <div class="col-md-6">
-              <div class="card h-100 border-primary text-center p-3">
+            <div class="col-md-6 col-sm-6">
+              <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-map-marker-alt"></i></div>
                 <h3>Nearby Blood Banks</h3>
-                <p class="text-muted">Find the closest blood bank or hospital to your location on the map.</p>
-                <a href="nearby_banks.php" class="btn btn-outline-primary mt-auto">View Map</a>
+                <p>Find the closest blood bank or hospital to your location on the map.</p>
+                <a href="nearby_banks.php" class="btn btn-outline-danger mt-auto">View Map</a>
               </div>
             </div>
 
-            <div class="col-md-6">
-              <div class="card h-100 text-center p-3">
+            <div class="col-md-6 col-sm-6">
+              <div class="quick-card">
+                <div class="quick-icon"><i class="fas fa-sign-out-alt"></i></div>
                 <h3>Logout</h3>
-                <p class="text-muted">Sign out of your BloodLink donor account securely.</p>
+                <p>Sign out of your BloodLink donor account securely.</p>
                 <a href="logout.php" class="btn btn-outline-secondary mt-auto">Logout</a>
               </div>
             </div>
@@ -105,7 +106,7 @@ $donorId  = $student['reg_no'] ?? $_SESSION['reg_no'] ?? 'N/A';
           </div>
 
         </div>
-      </section>
+      </div>
 
     </main>
 

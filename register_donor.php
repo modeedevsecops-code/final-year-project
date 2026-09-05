@@ -1,5 +1,5 @@
 <?php
-include 'config/functions.php';
+include_once 'config/functions.php';
 $dbb = new operations();
 
 $msg = '';

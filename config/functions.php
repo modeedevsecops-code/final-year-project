@@ -278,7 +278,7 @@ public function user_login() {
 
     elseif ($role == 'recipient') {
             // recipient login check
-            $reg_no = $this->check($_POST['recipient_reg_no']);
+            $reg_no = $this->check($_POST['recipient_email']);
             $password = $_POST['recipient_password'];
 
             $query = "SELECT * FROM recipients WHERE email = '$reg_no' OR recipient_id = '$reg_no' LIMIT 1";
@@ -287,7 +287,7 @@ public function user_login() {
             if ($result && mysqli_num_rows($result) > 0) {
                 $user = mysqli_fetch_assoc($result);
 
-                if (password_verify($password, $user['password']) || $password === $user['password']) {
+                if (password_verify($password, $user['password'])) {
                     $_SESSION['Active'] = 'Active';
                     $_SESSION['role'] = 'recipient';
                     $_SESSION['user_id'] = $user['recipient_id'];
@@ -1518,6 +1518,206 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
         }
 
     }
+
+    // ===================== BLOOD DONATION MATCHING (56-DAY RULE) =====================
+
+    const DONATION_ELIGIBILITY_DAYS = 56;
+
+    // Recipient blood group => compatible donor blood groups
+    public function get_compatible_donor_types($recipient_blood_group) {
+        $map = [
+            'A+'  => ['A+', 'A-', 'O+', 'O-'],
+            'A-'  => ['A-', 'O-'],
+            'B+'  => ['B+', 'B-', 'O+', 'O-'],
+            'B-'  => ['B-', 'O-'],
+            'AB+' => ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'],
+            'AB-' => ['A-', 'B-', 'AB-', 'O-'],
+            'O+'  => ['O+', 'O-'],
+            'O-'  => ['O-'],
+        ];
+        $recipient_blood_group = strtoupper(trim($recipient_blood_group));
+        return isset($map[$recipient_blood_group]) ? $map[$recipient_blood_group] : [];
+    }
+
+    // Is a donor eligible right now? (56 days since last donation, or never donated)
+    public function is_donor_eligible($last_donation_date) {
+        if (empty($last_donation_date)) return true;
+        $last = new DateTime($last_donation_date);
+        $today = new DateTime('today');
+        $days_since = (int)$today->diff($last)->days;
+        return $days_since >= self::DONATION_ELIGIBILITY_DAYS;
+    }
+
+    // Days remaining before a donor becomes eligible again (0 if already eligible)
+    public function days_until_eligible($last_donation_date) {
+        if (empty($last_donation_date)) return 0;
+        $last = new DateTime($last_donation_date);
+        $today = new DateTime('today');
+        $days_since = (int)$today->diff($last)->days;
+        $remaining = self::DONATION_ELIGIBILITY_DAYS - $days_since;
+        return $remaining > 0 ? $remaining : 0;
+    }
+
+    // Find eligible, compatible donors for a given recipient blood group
+    public function find_matching_donors($recipient_blood_group) {
+        global $db;
+
+        $compatible_types = $this->get_compatible_donor_types($recipient_blood_group);
+        if (empty($compatible_types)) return [];
+
+        $safe_types = array_map(function($t) use ($db) {
+            return "'" . mysqli_real_escape_string($db->connection, $t) . "'";
+        }, $compatible_types);
+        $in_clause = implode(',', $safe_types);
+
+        $query = "
+            SELECT student_id, name, email, phone, blood_group, last_donation_date,
+                   CASE
+                     WHEN last_donation_date IS NULL THEN 9999
+                     ELSE DATEDIFF(CURDATE(), last_donation_date)
+                   END AS days_since_last_donation
+            FROM students
+            WHERE blood_group IN ($in_clause)
+            HAVING last_donation_date IS NULL
+                   OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
+            ORDER BY days_since_last_donation DESC
+        ";
+        $result = mysqli_query($db->connection, $query);
+        return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+    }
+
+    // Confirm a donor match: donor -> recipient/request, approved by officer.
+    // Creates the donation record, resets the donor's 56-day clock,
+    // updates blood_stock, and updates the blood_requests status.
+    public function process_donation($donor_id, $recipient_id, $request_id, $officer_id, $blood_group, $units) {
+        global $db;
+
+        $donor_id     = intval($donor_id);
+        $recipient_id = $recipient_id ? intval($recipient_id) : null;
+        $request_id   = $request_id ? intval($request_id) : null;
+        $officer_id   = intval($officer_id);
+        $blood_group  = $db->check($blood_group);
+        $units        = intval($units);
+
+        // Re-check eligibility server-side (never trust the form alone)
+        $check = mysqli_query($db->connection, "SELECT last_donation_date FROM students WHERE student_id = '$donor_id'");
+        $donor_row = $check ? mysqli_fetch_assoc($check) : null;
+
+        if (!$donor_row) {
+            return ['success' => false, 'message' => 'Donor not found.'];
+        }
+        if (!$this->is_donor_eligible($donor_row['last_donation_date'])) {
+            $wait = $this->days_until_eligible($donor_row['last_donation_date']);
+            return ['success' => false, 'message' => "Donor is not yet eligible. $wait day(s) remaining of the 56-day window."];
+        }
+
+        mysqli_begin_transaction($db->connection);
+
+        try {
+            $today = date('Y-m-d');
+            $recipient_sql = $recipient_id ? "'$recipient_id'" : 'NULL';
+            $request_sql = $request_id ? "'$request_id'" : 'NULL';
+
+            // 1. Insert donation record
+            $query = "INSERT INTO donations (donor_id, recipient_id, request_id, officer_id, blood_group, units, donation_date, status)
+                      VALUES ('$donor_id', $recipient_sql, $request_sql, '$officer_id', '$blood_group', '$units', '$today', 'Completed')";
+            if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
+            $donation_id = mysqli_insert_id($db->connection);
+
+            // 2. Reset donor's 56-day clock
+            $query = "UPDATE students SET last_donation_date = '$today' WHERE student_id = '$donor_id'";
+            if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
+
+            // 3. Add donated units to stock
+            $query = "UPDATE blood_stock SET units_available = units_available + '$units' WHERE blood_group = '$blood_group'";
+            if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
+
+            // 4. If tied to a request, update its status and draw the units back down from stock
+            if ($request_id) {
+                $req_result = mysqli_query($db->connection, "SELECT units_needed FROM blood_requests WHERE request_id = '$request_id'");
+                $req_row = $req_result ? mysqli_fetch_assoc($req_result) : null;
+
+                if ($req_row) {
+                    $new_status = ($units >= intval($req_row['units_needed'])) ? 'Fulfilled' : 'Approved';
+                    $query = "UPDATE blood_requests SET status = '$new_status' WHERE request_id = '$request_id'";
+                    if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
+                }
+
+                $query = "UPDATE blood_stock SET units_available = GREATEST(units_available - '$units', 0) WHERE blood_group = '$blood_group'";
+                if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
+            }
+
+            // 5. Resolve any related stock alert now that stock improved (non-critical, don't throw)
+            $query = "UPDATE stock_alerts sa
+                      JOIN blood_stock bs ON bs.stock_id = sa.stock_id
+                      SET sa.status = 'resolved'
+                      WHERE bs.blood_group = '$blood_group' AND bs.units_available > bs.low_stock_threshold AND sa.status = 'unresolved'";
+            mysqli_query($db->connection, $query);
+
+            mysqli_commit($db->connection);
+            return ['success' => true, 'message' => 'Donation recorded successfully.', 'donation_id' => $donation_id];
+
+        } catch (Exception $e) {
+            mysqli_rollback($db->connection);
+            return ['success' => false, 'message' => 'Failed to record donation: ' . $e->getMessage()];
+        }
+    }
+
+    // Donation history for a donor: "You donated X to Y"
+    public function get_donor_history($donor_id) {
+        global $db;
+        $donor_id = intval($donor_id);
+        $query = "
+            SELECT d.donation_id, d.blood_group, d.units, d.donation_date, d.status,
+                   r.recipient_id, r.name AS recipient_name,
+                   br.patient_name, br.hospital_name
+            FROM donations d
+            LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
+            LEFT JOIN blood_requests br ON br.request_id = d.request_id
+            WHERE d.donor_id = '$donor_id'
+            ORDER BY d.donation_date DESC
+        ";
+        $result = mysqli_query($db->connection, $query);
+        return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+    }
+
+    // Donation history for a recipient: "You received X from Y"
+    public function get_recipient_history($recipient_id) {
+        global $db;
+        $recipient_id = intval($recipient_id);
+        $query = "
+            SELECT d.donation_id, d.blood_group, d.units, d.donation_date, d.status,
+                   s.student_id AS donor_id, s.name AS donor_name,
+                   br.patient_name, br.hospital_name
+            FROM donations d
+            LEFT JOIN students s ON s.student_id = d.donor_id
+            LEFT JOIN blood_requests br ON br.request_id = d.request_id
+            WHERE d.recipient_id = '$recipient_id'
+            ORDER BY d.donation_date DESC
+        ";
+        $result = mysqli_query($db->connection, $query);
+        return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+    }
+
+    // Open (Pending/Approved) blood requests, most urgent first, for the officer's queue
+    public function get_open_blood_requests() {
+        global $db;
+        $query = "SELECT * FROM blood_requests WHERE status IN ('Pending','Approved') ORDER BY
+                    FIELD(urgency_level,'Critical Emergency','Urgent','Normal'), created_at ASC";
+        $result = mysqli_query($db->connection, $query);
+        return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+    }
+
+    // Get a single blood request by ID
+    public function get_blood_request($request_id) {
+        global $db;
+        $request_id = intval($request_id);
+        $query = "SELECT * FROM blood_requests WHERE request_id = '$request_id'";
+        $result = mysqli_query($db->connection, $query);
+        return $result ? mysqli_fetch_assoc($result) : null;
+    }
+
+    // ===================== END BLOOD DONATION MATCHING =====================
 
 }
 
