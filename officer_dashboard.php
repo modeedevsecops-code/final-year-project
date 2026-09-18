@@ -32,8 +32,8 @@ include 'inc/header.php';
                 <div class="col-md-4 col-sm-6">
                     <div class="quick-card">
                         <div class="quick-icon"><i class="fas fa-users"></i></div>
-                        <h3>Assigned Donors</h3>
-                        <p>View and manage the donors assigned to your hospital or blood bank branch.</p>
+                        <h3>Donors</h3>
+                        <p>Browse the donor pool with blood group and current eligibility.</p>
                         <a href="assigned_donors.php" class="btn btn-danger mt-auto">View Donors</a>
                     </div>
                 </div>
@@ -55,10 +55,10 @@ include 'inc/header.php';
                 </div>
                 <div class="col-md-6 col-sm-6">
                     <div class="quick-card">
-                        <div class="quick-icon"><i class="fas fa-comment-medical"></i></div>
-                        <h3>Review Donations</h3>
-                        <p>Review and comment on donor logbook and donation submissions.</p>
-                        <a href="officer_comments.php" class="btn btn-outline-danger mt-auto">Open Reviews</a>
+                        <div class="quick-icon"><i class="fas fa-map-marker-alt"></i></div>
+                        <h3>Geo-Map</h3>
+                        <p>See donors and open requests on the live map.</p>
+                        <a href="geo_map.php" class="btn btn-outline-danger mt-auto">Open Map</a>
                     </div>
                 </div>
                 <div class="col-md-6 col-sm-6">

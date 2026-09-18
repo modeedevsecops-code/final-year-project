@@ -34,14 +34,8 @@ DROP TABLE IF EXISTS `stock_alerts`;
 DROP TABLE IF EXISTS `blood_stock`;
 DROP TABLE IF EXISTS `donations`;
 DROP TABLE IF EXISTS `recipients`;
-DROP TABLE IF EXISTS `attendance`;
-DROP TABLE IF EXISTS `chat_messages`;
-DROP TABLE IF EXISTS `weekly_summaries`;
-DROP TABLE IF EXISTS `logbook_entries`;
 DROP TABLE IF EXISTS `notices`;
-DROP TABLE IF EXISTS `projects`;
 DROP TABLE IF EXISTS `blood_requests`;
-DROP TABLE IF EXISTS `seminar`;
 DROP TABLE IF EXISTS `students`;
 DROP TABLE IF EXISTS `staff`;
 DROP TABLE IF EXISTS `login`;
@@ -119,19 +113,6 @@ CREATE TABLE `recipients` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Blood recipients / patients';
 
--- ------------------------------------------------------------- seminar ----
--- Blood donation drives / events.
-CREATE TABLE `seminar` (
-  `seminar_id`    INT(11) NOT NULL AUTO_INCREMENT,
-  `seminar_title` VARCHAR(255) NOT NULL COMMENT 'Blood drive title',
-  `seminar_date`  DATE NOT NULL,
-  `seminar_time`  TIME NOT NULL,
-  `venue`         VARCHAR(255) NOT NULL,
-  `level`         VARCHAR(100) DEFAULT NULL COMMENT 'Target blood group / eligibility',
-  `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`seminar_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Blood donation drives / events';
 
 -- ------------------------------------------------------- blood_requests ----
 -- recipient_id, latitude and longitude are new in v2. request_blood.php used to
@@ -160,26 +141,6 @@ CREATE TABLE `blood_requests` (
     REFERENCES `recipients` (`recipient_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- ------------------------------------------------------------ projects ----
--- Donor-to-officer assignments.
-CREATE TABLE `projects` (
-  `project_id`          INT(11) NOT NULL AUTO_INCREMENT,
-  `title`               VARCHAR(255) NOT NULL COMMENT 'Hospital / blood bank name',
-  `assigned_student`    INT(11) NOT NULL COMMENT 'FK -> students.student_id (donor)',
-  `assigned_supervisor` INT(11) NOT NULL COMMENT 'FK -> staff.staff_id (officer)',
-  `status`              VARCHAR(50) NOT NULL DEFAULT 'Pending',
-  `methodology`         VARCHAR(255) DEFAULT NULL COMMENT 'Donation schedule / frequency',
-  `description`         TEXT DEFAULT NULL,
-  `created_at`          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`project_id`),
-  KEY `fk_project_student` (`assigned_student`),
-  KEY `fk_project_supervisor` (`assigned_supervisor`),
-  CONSTRAINT `fk_project_student` FOREIGN KEY (`assigned_student`)
-    REFERENCES `students` (`student_id`) ON DELETE CASCADE,
-  CONSTRAINT `fk_project_supervisor` FOREIGN KEY (`assigned_supervisor`)
-    REFERENCES `staff` (`staff_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Donor-to-officer assignments';
 
 -- ------------------------------------------------------------- notices ----
 -- Emergency alerts. supervisor_id is NULL-able in v2: request_blood.php posts
@@ -197,68 +158,9 @@ CREATE TABLE `notices` (
     REFERENCES `staff` (`staff_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- ----------------------------------------------------- logbook_entries ----
--- Donor-submitted activity log. NOTE: this is NOT the donation ledger — that is
--- the donations table below. reports.php currently counts rows here as
--- "Total Donations", which Phase 4 repoints.
-CREATE TABLE `logbook_entries` (
-  `log_id`             INT(11) NOT NULL AUTO_INCREMENT,
-  `student_id`         INT(11) NOT NULL,
-  `entry_date`         DATE NOT NULL,
-  `activities`         TEXT NOT NULL,
-  `supervisor_comment` TEXT DEFAULT NULL,
-  `status`             ENUM('pending','approved','rejected') DEFAULT 'pending',
-  `created_at`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`log_id`),
-  KEY `fk_log_student` (`student_id`),
-  CONSTRAINT `fk_log_student` FOREIGN KEY (`student_id`)
-    REFERENCES `students` (`student_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- ---------------------------------------------------- weekly_summaries ----
-CREATE TABLE `weekly_summaries` (
-  `summary_id`         INT(11) NOT NULL AUTO_INCREMENT,
-  `student_id`         INT(11) NOT NULL,
-  `week_start`         DATE NOT NULL,
-  `week_end`           DATE NOT NULL,
-  `summary`            TEXT NOT NULL,
-  `status`             ENUM('pending','approved','rejected') DEFAULT 'pending',
-  `supervisor_comment` TEXT DEFAULT NULL,
-  `created_at`         TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`summary_id`),
-  KEY `fk_summary_student` (`student_id`),
-  CONSTRAINT `fk_summary_student` FOREIGN KEY (`student_id`)
-    REFERENCES `students` (`student_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
--- ------------------------------------------------------- chat_messages ----
-CREATE TABLE `chat_messages` (
-  `message_id`    INT(11) NOT NULL AUTO_INCREMENT,
-  `supervisor_id` INT(11) NOT NULL,
-  `student_id`    INT(11) NOT NULL,
-  `sender`        ENUM('supervisor','student') NOT NULL,
-  `message`       TEXT NOT NULL,
-  `is_read`       TINYINT(1) DEFAULT 0,
-  `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`message_id`),
-  KEY `idx_chat_thread` (`supervisor_id`,`student_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Chat between hospital officers and donors';
 
--- ---------------------------------------------------------- attendance ----
-CREATE TABLE `attendance` (
-  `attendance_id`   INT(11) NOT NULL AUTO_INCREMENT,
-  `supervisor_id`   INT(11) NOT NULL,
-  `student_id`      INT(11) NOT NULL,
-  `project_id`      INT(11) NOT NULL,
-  `attendance_date` DATE NOT NULL,
-  `status`          ENUM('Present','Absent') DEFAULT 'Absent',
-  `remarks`         VARCHAR(255) DEFAULT NULL,
-  `created_at`      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`attendance_id`),
-  UNIQUE KEY `unique_attendance` (`student_id`,`attendance_date`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Donor check-in at blood drives';
 
 -- ----------------------------------------------------------- donations ----
 -- NEW in v2. The real donation ledger, written transactionally by

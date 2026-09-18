@@ -23,11 +23,6 @@ include 'inc/header.php';
           <h2>Manage Blood Donors</h2>
           <?php $dbb->display_message() ?>
 
-          <!-- Button to assign hospital officer -->
-          <a href="assign.php" type="button" class="btn btn-success mb-3">
-            Assign Hospital Officer
-          </a>
-
           <!-- Form to add a new donor -->
           <form action="" method="POST">
             <?php bl_csrf_field(); // BL-14 ?>

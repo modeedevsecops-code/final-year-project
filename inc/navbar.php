@@ -119,7 +119,6 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='manage_donors.php'?'active':''; ?>" href="manage_donors.php"><i class="fas fa-tint"></i> Manage Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_officers.php'?'active':''; ?>" href="manage_officers.php"><i class="fas fa-briefcase"></i> Hospital Officers</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_recipients.php'?'active':''; ?>" href="manage_recipients.php"><i class="fas fa-user-injured"></i> Recipients</a></li>
-            <li><a class="nav-link <?php echo $current_page=='assigned_donors.php'?'active':''; ?>" href="assigned_donors.php"><i class="fas fa-user-check"></i> Assigned Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_blood_stock.php'?'active':''; ?>" href="manage_blood_stock.php"><i class="fas fa-flask"></i> Blood Stock</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
@@ -131,10 +130,10 @@ switch ($_SESSION['role'] ?? '') {
         } elseif ($_SESSION['role'] == 'supervisor' ) {
         ?>
             <li><a class="nav-link <?php echo $current_page=='officer_dashboard.php'?'active':''; ?>" href="officer_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a class="nav-link <?php echo $current_page=='assigned_donors.php'?'active':''; ?>" href="assigned_donors.php"><i class="fas fa-user-check"></i> Assigned Donors</a></li>
+            <li><a class="nav-link <?php echo $current_page=='assigned_donors.php'?'active':''; ?>" href="assigned_donors.php"><i class="fas fa-users"></i> Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
-            <li><a class="nav-link <?php echo $current_page=='officer_comments.php'?'active':''; ?>" href="officer_comments.php"><i class="fas fa-comment-medical"></i> Comments</a></li>
+            <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php
@@ -142,7 +141,7 @@ switch ($_SESSION['role'] ?? '') {
         ?>
             <li><a class="nav-link <?php echo $current_page=='donor_dashboard.php'?'active':''; ?>" href="donor_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='donation_form.php'?'active':''; ?>" href="donation_form.php"><i class="fas fa-tint"></i> Donate Blood</a></li>
-            <li><a class="nav-link <?php echo $current_page=='my_officer.php'?'active':''; ?>" href="my_officer.php"><i class="fas fa-user"></i> My Officer</a></li>
+            <li><a class="nav-link <?php echo $current_page=='emergency_alerts.php'?'active':''; ?>" href="emergency_alerts.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Nearby Banks</a></li>
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>

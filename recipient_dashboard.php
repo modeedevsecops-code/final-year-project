@@ -57,10 +57,10 @@ $recipientName = $_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Recipient';
 
             <div class="col-md-4 col-sm-6">
               <div class="quick-card">
-                <div class="quick-icon"><i class="fas fa-user-md"></i></div>
-                <h3>My Hospital Officer</h3>
-                <p>View your assigned hospital officer and their contact details.</p>
-                <a href="my_officer.php" class="btn btn-outline-danger mt-auto">View Officer</a>
+                <div class="quick-icon"><i class="fas fa-bell"></i></div>
+                <h3>Emergency Alerts</h3>
+                <p>See urgent blood needs and the status of critical requests.</p>
+                <a href="geo_map.php" class="btn btn-outline-danger mt-auto">Nearby Banks</a>
               </div>
             </div>
 

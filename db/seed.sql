@@ -37,15 +37,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE `stock_alerts`;
 TRUNCATE TABLE `blood_stock`;
 TRUNCATE TABLE `donations`;
-TRUNCATE TABLE `chat_messages`;
-TRUNCATE TABLE `attendance`;
-TRUNCATE TABLE `weekly_summaries`;
-TRUNCATE TABLE `logbook_entries`;
 TRUNCATE TABLE `notices`;
-TRUNCATE TABLE `projects`;
 TRUNCATE TABLE `blood_requests`;
 TRUNCATE TABLE `recipients`;
-TRUNCATE TABLE `seminar`;
 TRUNCATE TABLE `students`;
 TRUNCATE TABLE `staff`;
 TRUNCATE TABLE `login`;
@@ -130,11 +124,6 @@ INSERT INTO `blood_requests`
 -- Already fulfilled: must not appear in the officer's open queue.
 (4, 1, 'Hassan Umar',  'A+',  1, 'Barau Dikko Teaching Hospital',       'Kaduna',      10.5105000, 7.4165000, 'Normal',             'Fulfilled','Hassan Umar',  '08051112201');
 
--- --------------------------------------------------- officer assignments --
-INSERT INTO `projects` (`project_id`,`title`,`assigned_student`,`assigned_supervisor`,`status`,`methodology`,`description`) VALUES
-(1, 'Barau Dikko Teaching Hospital, Kaduna', 1, 1, 'In Progress', 'Every 3 months', 'Regular voluntary donor'),
-(2, 'Barau Dikko Teaching Hospital, Kaduna', 3, 1, 'In Progress', 'Every 6 months', 'Walk-in donor'),
-(3, 'ABU Teaching Hospital, Zaria',          7, 2, 'In Progress', 'Every 4 months', 'Regular voluntary donor');
 
 -- ----------------------------------------------------------- notices -------
 -- supervisor_id NULL exercises the nullable column added in v2.
@@ -143,12 +132,4 @@ INSERT INTO `notices` (`supervisor_id`,`title`,`message`) VALUES
 (NULL, 'Emergency: O- blood needed at Barau Dikko Teaching Hospital',
        '2 unit(s) of O- needed urgently for patient Hassan Umar at Barau Dikko Teaching Hospital (Kaduna). Contact: 08051112201.');
 
--- ----------------------------------------------------------- blood drive --
-INSERT INTO `seminar` (`seminar_title`,`seminar_date`,`seminar_time`,`venue`,`level`) VALUES
-('World Blood Donor Day Drive', DATE_ADD(CURDATE(), INTERVAL 14 DAY), '09:00:00', 'Barau Dikko Teaching Hospital, Kaduna', 'All blood groups'),
-('Campus Blood Drive',          DATE_ADD(CURDATE(), INTERVAL 30 DAY), '10:00:00', 'ABU Zaria Main Campus',                 'O- and O+ priority');
 
--- ------------------------------------------------------------ chat sample --
-INSERT INTO `chat_messages` (`supervisor_id`,`student_id`,`sender`,`message`,`is_read`) VALUES
-(1, 1, 'supervisor', 'Hello Zainab, are you available to donate this week?', 1),
-(1, 1, 'student',    'Yes sir, I am available on Thursday.',                  0);

@@ -103,8 +103,7 @@ if ($officers_res) {
                         <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addOfficerModal">
                             + Add Hospital Officer
                         </button>
-                        <a href="assign.php" class="btn btn-outline-success btn-sm">Assign Officer to Donor</a>
-                        <a href="Dashboard.php" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+                        <a href="dashboard.php" class="btn btn-outline-secondary btn-sm">Dashboard</a>
                     </div>
                 </div>
 

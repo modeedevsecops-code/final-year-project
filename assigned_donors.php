@@ -1,98 +1,83 @@
 <?php
+// Donor directory. In a blood bank an officer serves the whole eligible donor
+// pool, not a personal roster — so this lists every donor with their blood
+// group and current 56-day eligibility. Admins and officers both use it.
 require_once 'config/db.php';
-
-// Admins and officers both reach this page from their sidebars. Officers see
-// their own assigned donors; admins see every assignment. Was supervisor-only,
-// which bounced admins to the login form.
 if (empty($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervisor'], true)) {
-  header('Location: login.php');
-  exit;
+    header('Location: login.php');
+    exit;
 }
 
-$dbb = new operations();
-$is_admin = ($_SESSION['role'] === 'admin');
+$ops = new operations();
+$conn = $db->connection;
 
-if ($is_admin) {
-    $students = $dbb->get_all_assignments();          // every donor↔officer assignment
-    $backLink = 'dashboard.php';
-} else {
-    $supervisor_id = intval($_SESSION['supervisor_id']);
-    $students = $dbb->get_assigned_students($supervisor_id);
-    $backLink = 'officer_dashboard.php';
-}
-require_once 'inc/header.php';
+$donors = [];
+$res = mysqli_query($conn,
+    "SELECT student_id, name, reg_no, email, phone, blood_group, last_donation_date
+     FROM students ORDER BY name ASC");
+if ($res) { while ($r = mysqli_fetch_assoc($res)) { $donors[] = $r; } }
+
+$backLink = ($_SESSION['role'] === 'admin') ? 'dashboard.php' : 'officer_dashboard.php';
+include 'inc/header.php';
 ?>
-
 <!DOCTYPE html>
-<html lang="en-US">
-
+<html lang="en-US" dir="ltr">
 <body>
-  <?php include 'inc/navbar.php'; ?>
-  <div class="container py-5 mt-5">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="mb-0"><?php echo $is_admin ? 'All Assigned Donors' : 'My Assigned Donors'; ?></h3>
-      <a href="<?php echo $backLink; ?>" class="btn btn-outline-secondary">Back to Dashboard</a>
-    </div>
+<main class="main" id="top">
+    <?php include 'inc/navbar.php'; ?>
 
-    <div class="card">
-      <div class="card-body">
-        <?php if (empty($students)): ?>
-          <div class="alert alert-info">No donors assigned to you yet.</div>
-        <?php else: ?>
-          <div class="table-responsive">
-            <table class="table table-striped table-bordered align-middle">
-              <thead class="table-light">
-                <tr>
-                  <th>#</th>
-                  <th>Donor Name</th>
-                  <th>Donor ID</th>
-                  <th>Email</th>
-                  <th>Phone</th>
-                  <th>Blood Type</th>
-                  <?php if ($is_admin): ?><th>Assigned Officer</th><?php endif; ?>
-                  <th>Donation Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                <?php $i = 1;
-                foreach ($students as $row): ?>
-                  <tr>
-                    <td><?php echo $i++; ?></td>
-                    <td><?php echo htmlspecialchars($row['name']); ?></td>
-                    <td><?php echo htmlspecialchars($row['reg_no']); ?></td>
-                    <td><?php echo htmlspecialchars($row['email']); ?></td>
-                    <td><?php echo htmlspecialchars($row['phone']); ?></td>
-                    <td>
-                      <span class="badge bg-danger">
-                        <?php echo htmlspecialchars($row['blood_group'] ?? 'N/A'); ?>
-                      </span>
-                    </td>
-                    <?php if ($is_admin): ?>
-                      <td><?php echo htmlspecialchars($row['officer_name'] ?? '—'); ?></td>
-                    <?php endif; ?>
-                    <td><?php echo htmlspecialchars($row['status']); ?></td>
-                    <td>
-                      <?php if (!$is_admin): ?>
-                        <a href="officer_chat.php?student_id=<?php echo urlencode($row['student_id']); ?>"
-                          class="btn btn-sm btn-success">Chat</a>
-                        <a href="officer_comments.php?student_id=<?php echo urlencode($row['student_id']); ?>"
-                          class="btn btn-sm btn-danger">Review Donations</a>
-                      <?php else: ?>
-                        <span style="color:#999; font-size:.85rem;">—</span>
-                      <?php endif; ?>
-                    </td>
-                  </tr>
-                <?php endforeach; ?>
-              </tbody>
+    <div class="main-content">
+        <div class="welcome-banner">
+            <span class="badge-pill">DONORS</span>
+            <h1>Donor Directory</h1>
+            <p>Every registered donor with blood group and current eligibility (56-day rule).</p>
+        </div>
+
+        <div class="quick-card" style="text-align:left;">
+            <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse;">
+                <thead>
+                    <tr style="background:#f9f9f9; text-align:left;">
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">#</th>
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">Donor Name</th>
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">Donor ID</th>
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">Blood Group</th>
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">Last Donation</th>
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">Eligibility</th>
+                        <th style="padding:10px; font-size:.85rem; color:#6c757d;">Contact</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($donors)): ?>
+                        <tr><td colspan="7" style="padding:16px; color:#888;">No donors registered yet.</td></tr>
+                    <?php else: $i = 1; foreach ($donors as $d):
+                        $eligible = $ops->is_donor_eligible($d['last_donation_date']);
+                        $days = $ops->days_until_eligible($d['last_donation_date']);
+                    ?>
+                        <tr style="border-bottom:1px solid #f0f0f0;">
+                            <td style="padding:10px;"><?= $i++ ?></td>
+                            <td style="padding:10px;"><?= htmlspecialchars($d['name']) ?></td>
+                            <td style="padding:10px;"><?= htmlspecialchars($d['reg_no']) ?></td>
+                            <td style="padding:10px;"><span class="badge-pill" style="background:#fdeaea;color:#7a0000;"><?= htmlspecialchars($d['blood_group'] ?? 'N/A') ?></span></td>
+                            <td style="padding:10px; color:#6c757d; font-size:.9rem;"><?= $d['last_donation_date'] ? htmlspecialchars($d['last_donation_date']) : 'Never' ?></td>
+                            <td style="padding:10px;">
+                                <?php if ($eligible): ?>
+                                    <span class="badge-pill" style="background:#eaf3ee;color:#2c6a4a;">Eligible</span>
+                                <?php else: ?>
+                                    <span class="badge-pill" style="background:#fbf3e6;color:#a9660a;"><?= (int)$days ?>d to go</span>
+                                <?php endif; ?>
+                            </td>
+                            <td style="padding:10px; font-size:.9rem;"><?= htmlspecialchars($d['phone']) ?><br><span style="color:#888;"><?= htmlspecialchars($d['email']) ?></span></td>
+                        </tr>
+                    <?php endforeach; endif; ?>
+                </tbody>
             </table>
-          </div>
-        <?php endif; ?>
-      </div>
+            </div>
+        </div>
+
+        <div style="margin-top:20px;"><a href="<?= $backLink ?>" class="btn btn-outline-secondary">Back to Dashboard</a></div>
     </div>
-  </div>
-
-  <?php include 'inc/main_js.php'; ?>
+</main>
+<?php include 'inc/main_js.php'; ?>
 </body>
-
 </html>

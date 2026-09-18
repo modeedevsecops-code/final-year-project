@@ -52,7 +52,7 @@ $donorId  = $student['reg_no'] ?? $_SESSION['reg_no'] ?? 'N/A';
           <div class="welcome-banner">
             <span class="badge-pill">DASHBOARD OVERVIEW</span>
             <h1>Welcome back, <?php echo htmlspecialchars($userName); ?>!</h1>
-            <p>Donor ID: <strong><?php echo htmlspecialchars($donorId); ?></strong> &nbsp;|&nbsp; Access your donation form, donation history, assigned officer, and nearby blood banks.</p>
+            <p>Donor ID: <strong><?php echo htmlspecialchars($donorId); ?></strong> &nbsp;|&nbsp; Access your donation form, see emergency alerts, and find nearby blood banks.</p>
           </div>
 
           <!-- Quick Action Cards -->
@@ -67,14 +67,6 @@ $donorId  = $student['reg_no'] ?? $_SESSION['reg_no'] ?? 'N/A';
               </div>
             </div>
 
-            <div class="col-md-4 col-sm-6">
-              <div class="quick-card">
-                <div class="quick-icon"><i class="fas fa-user-md"></i></div>
-                <h3>My Hospital Officer</h3>
-                <p>View your assigned hospital officer and their contact details.</p>
-                <a href="my_officer.php" class="btn btn-outline-danger mt-auto">View Officer</a>
-              </div>
-            </div>
 
             <div class="col-md-4 col-sm-6">
               <div class="quick-card">
