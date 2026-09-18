@@ -11,6 +11,26 @@ ini_set('log_errors', '1');
 ini_set('display_errors', APP_DEBUG ? '1' : '0');
 ini_set('display_startup_errors', APP_DEBUG ? '1' : '0');
 
+// Since PHP 8.1 mysqli throws on any failed query (BL-26). This codebase mostly
+// doesn't check return values, so a stray failure would otherwise be a blank
+// 500. Log every uncaught error and show a friendly page in production; show the
+// detail only when APP_DEBUG is on.
+set_exception_handler(function ($e) {
+    error_log('[BloodLink] Uncaught ' . get_class($e) . ': ' . $e->getMessage()
+              . ' in ' . $e->getFile() . ':' . $e->getLine());
+    if (!headers_sent()) { http_response_code(500); }
+    if (defined('APP_DEBUG') && APP_DEBUG) {
+        echo '<pre style="white-space:pre-wrap">' . htmlspecialchars((string)$e) . '</pre>';
+    } else {
+        echo '<!doctype html><meta charset="utf-8">'
+           . '<div style="font-family:system-ui,sans-serif;max-width:520px;margin:80px auto;text-align:center;color:#333">'
+           . '<h2 style="color:#7a0000">Something went wrong</h2>'
+           . '<p>An unexpected error occurred. Please try again, or contact the administrator if it persists.</p>'
+           . '</div>';
+    }
+    exit;
+});
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -1678,7 +1698,18 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
     }
 
     // Find eligible, compatible donors for a given recipient blood group
-    public function find_matching_donors($recipient_blood_group) {
+    // Eligible, compatible donors for a recipient blood group.
+    //
+    // The whole reason this system has geo-location: blood is time-critical and
+    // the donor has to physically reach the hospital, so when the request's
+    // coordinates are known we compute each donor's distance (Haversine, in km)
+    // and order NEAREST FIRST — that is the clinically useful ordering for an
+    // officer working a critical request. Donors without coordinates are still
+    // returned (they're valid donors), just sorted after the located ones.
+    //
+    // With no coordinates passed, behaviour is unchanged: order by longest time
+    // since last donation.
+    public function find_matching_donors($recipient_blood_group, $lat = null, $lng = null, $radius_km = null) {
         global $db;
 
         $compatible_types = $this->get_compatible_donor_types($recipient_blood_group);
@@ -1689,18 +1720,44 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
         }, $compatible_types);
         $in_clause = implode(',', $safe_types);
 
-        $query = "
-            SELECT student_id, name, email, phone, blood_group, last_donation_date,
-                   CASE
-                     WHEN last_donation_date IS NULL THEN 9999
-                     ELSE DATEDIFF(CURDATE(), last_donation_date)
-                   END AS days_since_last_donation
-            FROM students
-            WHERE blood_group IN ($in_clause)
-            HAVING last_donation_date IS NULL
-                   OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
-            ORDER BY days_since_last_donation DESC
-        ";
+        $has_geo = is_numeric($lat) && is_numeric($lng);
+        if ($has_geo) {
+            $lat = (float)$lat; $lng = (float)$lng;
+            // 6371 = Earth radius in km.
+            $distance_expr = "(6371 * ACOS(
+                LEAST(1.0, COS(RADIANS($lat)) * COS(RADIANS(latitude)) *
+                COS(RADIANS(longitude) - RADIANS($lng)) +
+                SIN(RADIANS($lat)) * SIN(RADIANS(latitude)))))";
+            $radius_clause = ($radius_km !== null && is_numeric($radius_km))
+                ? " AND $distance_expr <= " . (float)$radius_km : "";
+            $query = "
+                SELECT student_id, name, email, phone, blood_group, last_donation_date,
+                       latitude, longitude,
+                       CASE WHEN last_donation_date IS NULL THEN 9999
+                            ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
+                       CASE WHEN latitude IS NULL OR longitude IS NULL THEN NULL
+                            ELSE ROUND($distance_expr, 1) END AS distance_km
+                FROM students
+                WHERE blood_group IN ($in_clause)
+                  AND (last_donation_date IS NULL
+                       OR DATEDIFF(CURDATE(), last_donation_date) >= " . self::DONATION_ELIGIBILITY_DAYS . ")
+                  $radius_clause
+                ORDER BY (distance_km IS NULL), distance_km ASC, days_since_last_donation DESC
+            ";
+        } else {
+            $query = "
+                SELECT student_id, name, email, phone, blood_group, last_donation_date,
+                       latitude, longitude,
+                       CASE WHEN last_donation_date IS NULL THEN 9999
+                            ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
+                       NULL AS distance_km
+                FROM students
+                WHERE blood_group IN ($in_clause)
+                HAVING last_donation_date IS NULL
+                       OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
+                ORDER BY days_since_last_donation DESC
+            ";
+        }
         $result = mysqli_query($db->connection, $query);
         return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
     }

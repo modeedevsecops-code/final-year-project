@@ -11,11 +11,16 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 
 $dbb = new operations();
 
-// Handle deletion of assignments
-if (isset($_GET['delete_id'])) {
+// Handle deletion of assignments — POST + CSRF only (was a CSRF-able GET link).
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    bl_csrf_check(); // BL-14
     global $db;
-    $del_id = intval($_GET['delete_id']);
-    mysqli_query($db->connection, "DELETE FROM projects WHERE project_id = $del_id");
+    $del_id = intval($_POST['delete_id']);
+    if ($stmt = mysqli_prepare($db->connection, "DELETE FROM projects WHERE project_id = ?")) {
+        mysqli_stmt_bind_param($stmt, "i", $del_id);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
     header('Location: assign.php?deleted=1');
     exit;
 }
@@ -137,9 +142,11 @@ $dbb->add_project();
                                                 </span>
                                             </td>
                                             <td>
-                                                <a href="?delete_id=<?php echo $project['project_id']; ?>" 
-                                                   class="btn btn-danger btn-xs py-0 px-1" 
-                                                   onclick="return confirm('Delete this assignment?');">Delete</a>
+                                                <form method="POST" style="display:inline;" onsubmit="return confirm('Delete this assignment?');">
+                                                    <?php bl_csrf_field(); // BL-14 ?>
+                                                    <input type="hidden" name="delete_id" value="<?php echo (int)$project['project_id']; ?>">
+                                                    <button type="submit" class="btn btn-danger btn-xs py-0 px-1">Delete</button>
+                                                </form>
                                             </td>
                                         </tr>
                                         <?php endforeach; ?>

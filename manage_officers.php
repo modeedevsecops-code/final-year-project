@@ -45,9 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
 // ─────────────────────────────────────────────────
 // Handle: Delete officer
 // ─────────────────────────────────────────────────
-if (isset($_GET['delete_id'])) {
-    $del_id = intval($_GET['delete_id']);
-    mysqli_query($conn, "DELETE FROM staff WHERE staff_id = $del_id");
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    bl_csrf_check(); // BL-14 — was a CSRF-able GET link
+    $del_id = intval($_POST['delete_id']);
+    if ($stmt = mysqli_prepare($conn, "DELETE FROM staff WHERE staff_id = ?")) {
+        mysqli_stmt_bind_param($stmt, "i", $del_id);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
     header('Location: manage_officers.php?deleted=1');
     exit;
 }
@@ -157,11 +162,12 @@ if ($officers_res) {
                                                 <td>
                                                     <a href="officer_donors.php?id=<?php echo $officer['staff_id']; ?>"
                                                         class="btn btn-sm btn-outline-primary">View Donors</a>
-                                                    <a href="?delete_id=<?php echo $officer['staff_id']; ?>"
-                                                        class="btn btn-sm btn-danger"
-                                                        onclick="return confirm('Delete this hospital officer? This cannot be undone.')">
-                                                        Delete
-                                                    </a>
+                                                    <form method="POST" style="display:inline;"
+                                                          onsubmit="return confirm('Delete this hospital officer? This cannot be undone.')">
+                                                        <?php bl_csrf_field(); // BL-14 ?>
+                                                        <input type="hidden" name="delete_id" value="<?php echo (int)$officer['staff_id']; ?>">
+                                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                                    </form>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
