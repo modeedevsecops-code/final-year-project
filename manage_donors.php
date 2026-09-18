@@ -1,11 +1,14 @@
 <?php
-// Include necessary files and database connection
-include 'inc/header.php';
+// DB + session first (no output yet), then guard, THEN header (which emits HTML).
 include 'config/db.php';
+bl_require_role('admin');   // BL-25: this page leaked every donor name/email to anyone.
 
 $dbb = new operations();
+bl_csrf_check();        // BL-14 (covers both add and delete POSTs below)
 $dbb->add_student(); // Handles adding a new donor
 $dbb->delete_student(); // Handles deleting a donor
+
+include 'inc/header.php';
 ?>
 
 <!DOCTYPE html>
@@ -27,6 +30,7 @@ $dbb->delete_student(); // Handles deleting a donor
 
           <!-- Form to add a new donor -->
           <form action="" method="POST">
+            <?php bl_csrf_field(); // BL-14 ?>
 
             <div class="form-group">
               <label for="name">Full Name</label>
@@ -95,7 +99,7 @@ $dbb->delete_student(); // Handles deleting a donor
 
           <!-- Table to display donors -->
           <h3 class="mt-5">Registered Donors</h3>
-          <form method="POST" action="export_students.php">
+          <form method="POST" action="export_donors.php">
             <button type="submit" class="btn btn-outline-success mb-3">Export to Excel</button>
           </form>
 
@@ -126,6 +130,7 @@ $dbb->delete_student(); // Handles deleting a donor
                         <td>
                           <a href="edit_donor.php?id=' . $student['student_id'] . '" class="btn btn-warning btn-sm">Edit</a>
                           <form action="" method="POST" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="' . htmlspecialchars(bl_csrf_token()) . '">
                             <input type="hidden" name="student_id" value="' . $student['student_id'] . '">
                             <button type="submit" name="btn_delete_student" class="btn btn-danger btn-sm">Delete</button>
                           </form>

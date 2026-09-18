@@ -27,7 +27,7 @@ $supervisor_id = $supervisor ? intval($supervisor['supervisor_id']) : 0;
 <div class="container py-5 mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Chat with Supervisor</h4>
-        <a href="student_dashboard.php" class="btn btn-outline-secondary btn-sm">Back</a>
+        <a href="donor_dashboard.php" class="btn btn-outline-secondary btn-sm">Back</a>
     </div>
 
     <?php if (!$supervisor || !$supervisor_id): ?>

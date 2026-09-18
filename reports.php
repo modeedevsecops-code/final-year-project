@@ -31,7 +31,7 @@ if ($export === 'donations_csv') {
     fputcsv($out, ['#', 'Donation Date', 'Donor Name', 'Donor ID', 'Blood Group', 'Hospital Officer', 'Hospital / Blood Bank', 'Donation Notes', 'Status', 'Officer Comment', 'Submitted At']);
 
     $q = "SELECT lb.log_id, lb.entry_date,
-                 s.name AS donor_name, s.reg_no AS donor_id, s.year_of_study AS blood_group,
+                 s.name AS donor_name, s.reg_no AS donor_id, s.blood_group,
                  st.staff_name AS officer_name, p.title AS hospital,
                  lb.activities, lb.status, lb.supervisor_comment, lb.created_at
           FROM logbook_entries lb
@@ -95,13 +95,13 @@ $approved_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM logbook_entries
 $rejected_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM logbook_entries WHERE status='rejected'");
 
 // ─────────────────────────────────────────────────
-// Blood Group Distribution (from students.year_of_study = blood group)
+// Blood Group Distribution (from students.blood_group)
 // ─────────────────────────────────────────────────
 $bg_res = mysqli_query(
     $conn,
-    "SELECT year_of_study AS blood_group, COUNT(*) AS cnt
+    "SELECT blood_group, COUNT(*) AS cnt
      FROM students
-     GROUP BY year_of_study
+     GROUP BY blood_group
      ORDER BY cnt DESC"
 );
 $blood_groups = [];
@@ -117,7 +117,7 @@ if ($bg_res) {
 // ─────────────────────────────────────────────────
 $top_donors_res = mysqli_query(
     $conn,
-    "SELECT s.student_id, s.name, s.reg_no AS donor_id, s.year_of_study AS blood_group,
+    "SELECT s.student_id, s.name, s.reg_no AS donor_id, s.blood_group,
             COUNT(lb.log_id) AS donation_count
      FROM students s
      LEFT JOIN logbook_entries lb ON lb.student_id = s.student_id
@@ -144,7 +144,7 @@ $top_officers_res = mysqli_query(
 // Recent Blood Donations (filtered)
 // ─────────────────────────────────────────────────
 $recent_q = "SELECT lb.log_id, lb.entry_date,
-                    s.name AS donor_name, s.reg_no AS donor_id, s.year_of_study AS blood_group,
+                    s.name AS donor_name, s.reg_no AS donor_id, s.blood_group,
                     st.staff_name AS officer_name,
                     p.title AS hospital,
                     lb.activities, lb.status, lb.created_at

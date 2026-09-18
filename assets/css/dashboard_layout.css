@@ -1,0 +1,225 @@
+/* ============================================================================
+   BloodLink — dashboard_layout.css
+   Recreated in Phase 1. Two pages (officer_dashboard.php, user-login.php) and
+   blood_requests.php referenced this file, but it did not exist — so the officer
+   dashboard rendered as unstyled stacked text (BL-17). Styles below match the
+   red BloodLink theme used in sidebar.css (#7a0000 / #cc0000).
+   ============================================================================ */
+
+:root {
+  --bl-red: #7a0000;
+  --bl-red-bright: #cc0000;
+  --bl-red-soft: #fdeaea;
+  --bl-ink: #1b1b1b;
+  --bl-muted: #6c757d;
+  --bl-line: #eee;
+  --bl-bg: #f6f7f9;
+}
+
+/* ---------- Two-column app shell ---------- */
+.dashboard-container {
+  display: flex;
+  min-height: 100vh;
+  background: var(--bl-bg);
+}
+
+.sidebar {
+  width: 250px;
+  flex: 0 0 250px;
+  background: linear-gradient(180deg, #7a0000 0%, #4d0000 100%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 0;
+}
+
+.sidebar-brand {
+  padding: 0 24px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 16px;
+}
+
+.sidebar-brand h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+  color: #fff;
+}
+
+.sidebar-menu {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.sidebar-menu li a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  color: rgba(255, 255, 255, 0.85);
+  text-decoration: none;
+  font-weight: 500;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-menu li a:hover,
+.sidebar-menu li.active a {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.sidebar-menu li a i {
+  width: 18px;
+  text-align: center;
+}
+
+/* ---------- Main column ---------- */
+.main-content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.top-navbar {
+  background: #fff;
+  border-bottom: 1px solid var(--bl-line);
+  padding: 14px 28px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-name {
+  font-weight: 600;
+  color: var(--bl-ink);
+}
+
+.avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--bl-red);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.content-body {
+  padding: 28px;
+}
+
+/* ---------- Welcome banner ---------- */
+.welcome-banner {
+  background: linear-gradient(135deg, #cc0000 0%, #7a0000 100%);
+  color: #fff;
+  border-radius: 14px;
+  padding: 28px 32px;
+  margin-bottom: 28px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.welcome-banner h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 8px 0;
+}
+
+.welcome-banner p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.welcome-banner .badge {
+  display: inline-block;
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Buttons ---------- */
+.btn-primary {
+  display: inline-block;
+  background: #fff;
+  color: var(--bl-red);
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+}
+
+/* ---------- Card grid ---------- */
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 20px;
+}
+
+.dashboard-card {
+  background: #fff;
+  border: 1px solid var(--bl-line);
+  border-radius: 12px;
+  padding: 24px;
+  display: block;
+  color: var(--bl-ink);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  transition: transform 0.12s, box-shadow 0.12s;
+}
+
+.dashboard-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 24px rgba(122, 0, 0, 0.12);
+}
+
+.dashboard-card i {
+  font-size: 1.6rem;
+  color: var(--bl-red-bright);
+  margin-bottom: 12px;
+}
+
+.dashboard-card h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.dashboard-card p {
+  color: var(--bl-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+  .dashboard-container { flex-direction: column; }
+  .sidebar { width: 100%; flex-basis: auto; flex-direction: row; overflow-x: auto; padding: 12px; }
+  .sidebar-brand { border: none; margin: 0; padding: 0 12px; display: flex; align-items: center; }
+  .sidebar-menu { display: flex; }
+  .sidebar-menu li a { padding: 10px 14px; white-space: nowrap; }
+}

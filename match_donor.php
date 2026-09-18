@@ -14,6 +14,7 @@ $feedback = null;
 
 // --- Handle donor confirmation submit ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_donation'])) {
+    bl_csrf_check(); // BL-14
     $donor_id     = (int)$_POST['donor_id'];
     $recipient_id = !empty($_POST['recipient_id']) ? (int)$_POST['recipient_id'] : null;
     $req_id       = (int)$_POST['request_id'];
@@ -94,6 +95,7 @@ $matching_donors = $request ? $ops->find_matching_donors($request['blood_group']
               <td><?= htmlspecialchars($donor['phone']) ?> / <?= htmlspecialchars($donor['email']) ?></td>
               <td>
                 <form method="POST" onsubmit="return confirm('Confirm this donation match?');">
+                  <?php bl_csrf_field(); // BL-14 ?>
                   <input type="hidden" name="donor_id" value="<?= (int)$donor['student_id'] ?>">
                   <input type="hidden" name="recipient_id" value="<?= (int)($request['recipient_id'] ?? 0) ?>">
                   <input type="hidden" name="request_id" value="<?= (int)$request['request_id'] ?>">

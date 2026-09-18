@@ -11,6 +11,7 @@ $conn = $db->connection;
 
 // --- Handle stock update ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    bl_csrf_check(); // BL-14
     $stock_id  = intval($_POST['stock_id']);
     $units     = intval($_POST['units_available']);
     $threshold = intval($_POST['low_stock_threshold']);
@@ -116,6 +117,7 @@ include 'inc/navbar.php';
                 ?>
                 <tr style="border-bottom:1px solid #f0f0f0; <?= $isLow ? 'background:#fff5f5;' : '' ?>">
                     <form method="POST">
+                        <?php bl_csrf_field(); // BL-14 ?>
                         <td style="padding:10px; font-weight:700; color:<?= $isLow ? '#d32f2f' : '#7a0000' ?>;">
                             <?= htmlspecialchars($row['blood_type']) ?>
                             <?php if ($isLow): ?><i class="fas fa-triangle-exclamation" style="margin-left:6px;"></i><?php endif; ?>

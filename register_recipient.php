@@ -4,6 +4,7 @@ $dbb = new operations();
 
 $msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_recipient'])) {
+  bl_csrf_check();      // BL-14
   global $db;
   $conn = $db->connection;
 
@@ -20,9 +21,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_recipien
   if ($dup && mysqli_num_rows($dup) > 0) {
     $msg = '<div class="alert alert-danger text-center">Registration failed. Email is already registered!</div>';
   } else {
-    // Geocoding disabled for now — lat/lng left NULL, added back later
+    // Geocode the address once, at registration, via Nominatim (Phase 3, BL-05).
+    list($lat, $lng) = bl_geocode(trim($_POST['address']));
+    $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'NULL';
+    $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'NULL';
     $q = "INSERT INTO recipients (name, email, phone, address, latitude, longitude, password)
-          VALUES ('$name', '$email', '$phone', '$address', NULL, NULL, '$password_hashed')";
+          VALUES ('$name', '$email', '$phone', '$address', $lat_sql, $lng_sql, '$password_hashed')";
 
     if (mysqli_query($conn, $q)) {
       $msg = '<div class="alert alert-success text-center">Registration successful! You can now <a href="user-login.php">login</a> to request blood.</div>';
@@ -207,6 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_recipien
 
   <div class="recip-card">
     <form action="" method="post">
+      <?php bl_csrf_field(); // BL-14 ?>
 
       <div class="recip-group">
         <label>

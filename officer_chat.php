@@ -32,13 +32,13 @@ if ($student_id) {
 <div class="container py-5 mt-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Chat with Student</h4>
-        <a href="supervisor_dashboard.php" class="btn btn-outline-secondary btn-sm">Back</a>
+        <a href="officer_dashboard.php" class="btn btn-outline-secondary btn-sm">Back</a>
     </div>
 
     <?php if (!$student_id || !$student): ?>
         <div class="alert alert-info">Select a student from your assigned list to chat.</div>
         <div>
-          <a href="assigned_students.php" class="btn btn-primary">View Assigned Students</a>
+          <a href="assigned_donors.php" class="btn btn-primary">View Assigned Students</a>
         </div>
     <?php else: ?>
 

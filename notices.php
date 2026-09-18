@@ -24,6 +24,7 @@ $dbb = new operations();
 // Handle form submission
 $post_success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_post_notice'])) {
+    bl_csrf_check();      // BL-14
     $title   = htmlspecialchars(trim($_POST['title']));
     $message = htmlspecialchars(trim($_POST['message']));
 
@@ -89,6 +90,7 @@ if ($is_admin) {
         <div class="card-header bg-danger text-white fw-bold">Post New Emergency Alert</div>
         <div class="card-body">
             <form method="POST" action="">
+                <?php bl_csrf_field(); // BL-14 ?>
                 <div class="mb-3">
                     <label for="title" class="form-label">Alert Title</label>
                     <input type="text" name="title" id="title" class="form-control"

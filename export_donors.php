@@ -1,6 +1,7 @@
 <?php
 // Connect to DB
 include 'config/db.php';
+bl_require_role('admin');   // BL-25: this handed the full donor table to any anonymous visitor.
 
 header("Content-Type: application/vnd.ms-excel");
 header("Content-Disposition: attachment; filename=students_list.xls");

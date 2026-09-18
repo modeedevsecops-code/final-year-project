@@ -15,6 +15,7 @@ $success = $error = '';
 
 // Handle POST actions: review donation entry
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+  bl_csrf_check();      // BL-14
   if (isset($_POST['action']) && $_POST['action'] === 'review_entry') {
     $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
     $status = isset($_POST['status']) ? $_POST['status'] : 'pending';
@@ -124,6 +125,7 @@ $student_entries = $view_student_id ? $dbb->get_student_logbook_for_supervisor($
                           class="btn btn-sm btn-outline-primary">Write Comment</a>
 
                         <form method="post" class="d-inline">
+                          <?php bl_csrf_field(); // BL-14 ?>
                           <input type="hidden" name="action" value="review_entry">
                           <input type="hidden" name="log_id" value="<?php echo intval($row['log_id']); ?>">
                           <input type="hidden" name="status" value="approved">
@@ -132,6 +134,7 @@ $student_entries = $view_student_id ? $dbb->get_student_logbook_for_supervisor($
                         </form>
 
                         <form method="post" class="d-inline" onsubmit="return confirm('Reject this donation record?');">
+                          <?php bl_csrf_field(); // BL-14 ?>
                           <input type="hidden" name="action" value="review_entry">
                           <input type="hidden" name="log_id" value="<?php echo intval($row['log_id']); ?>">
                           <input type="hidden" name="status" value="rejected">
@@ -182,6 +185,7 @@ $student_entries = $view_student_id ? $dbb->get_student_logbook_for_supervisor($
                   <?php echo nl2br(htmlspecialchars($entry['activities'])); ?></div>
 
                 <form method="post">
+                  <?php bl_csrf_field(); // BL-14 ?>
                   <input type="hidden" name="action" value="review_entry">
                   <input type="hidden" name="log_id" value="<?php echo intval($entry['log_id']); ?>">
 

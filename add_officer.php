@@ -13,14 +13,16 @@ $conn = $db->connection;
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
+    bl_csrf_check();      // BL-14
     $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
     $email      = mysqli_real_escape_string($conn, trim($_POST['email']));
     $phone      = mysqli_real_escape_string($conn, trim($_POST['phone']));
     $position   = mysqli_real_escape_string($conn, trim($_POST['position']));
     $hospital   = mysqli_real_escape_string($conn, trim($_POST['hospital']));
-    $password   = mysqli_real_escape_string($conn, trim($_POST['password']));
+    // Hash the officer's password at creation (BL-12).
+    $password   = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
 
-    if ($staff_name && $email && $phone && $password) {
+    if ($staff_name && $email && $phone && !empty(trim($_POST['password']))) {
         $full_position = $position . ($hospital ? ' – ' . $hospital : '');
         $q = "INSERT INTO staff (staff_name, phone, email, position, password)
               VALUES ('$staff_name', '$phone', '$email', '$full_position', '$password')";
@@ -56,6 +58,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
                 <?php echo $msg; ?>
 
                 <form action="" method="POST">
+                    <?php bl_csrf_field(); // BL-14 ?>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
                         <input type="text" class="form-control" name="staff_name"

@@ -1,7 +1,16 @@
 <?php
-ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
+// Errors are always logged, but only shown on screen when APP_DEBUG is on.
+// It defaults to OFF so stack traces, SQL and file paths never leak to users
+// (BL-24). Turn it on for local dev by putting  define('APP_DEBUG', true);
+// in config/config.local.php.
+if (!defined('APP_DEBUG')) {
+    define('APP_DEBUG', false);
+}
 error_reporting(E_ALL);
+ini_set('log_errors', '1');
+ini_set('display_errors', APP_DEBUG ? '1' : '0');
+ini_set('display_startup_errors', APP_DEBUG ? '1' : '0');
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
@@ -115,8 +124,10 @@ public function add_student() {
         $phone = $db->check($_POST['phone']);
         $department = $db->check($_POST['reg_no']);
         $password = $db->check($_POST['password']);
-        $year_of_study = $db->check($_POST['year_of_study']);
-        $address = $db->check($_POST['address']);
+        // The "year_of_study" select actually carries the blood group; the
+        // address field is named donor_address on the admin form.
+        $year_of_study = $db->check($_POST['year_of_study'] ?? ($_POST['blood_group'] ?? ''));
+        $address = $db->check($_POST['donor_address'] ?? ($_POST['address'] ?? ''));
 
         // Validate required fields
         if (!empty($name) && !empty($email) && !empty($phone) && !empty($department) && !empty($year_of_study) && !empty($address)) {
@@ -136,31 +147,23 @@ public function add_student() {
     }
 }
 
-// Inserting Record into the Database
-function insert_student($name, $email, $phone, $department, $year_of_study, $password, $address) {
+// Inserting Record into the Database.
+// $blood_group is passed in the old $year_of_study slot (the admin form's
+// select is named year_of_study but holds the blood group). It is written to
+// the real blood_group column now, so admin-added donors are visible to the
+// matching engine (BL-01). Geocoding uses Nominatim (Phase 3). Password is
+// hashed at creation (BL-12).
+function insert_student($name, $email, $phone, $department, $blood_group, $password, $address) {
     global $db;
 
-    // Geocode the address into latitude/longitude
-    $api_key = 'AIzaSyA23U0CLVVz5UBNZxiVjDBRS46zGE1C3HE';
-    $geo_url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address . ', Nigeria') . "&key={$api_key}";
+    list($latitude, $longitude) = bl_geocode($address);
+    $lat_val = $latitude !== null ? "'" . floatval($latitude) . "'" : 'NULL';
+    $lng_val = $longitude !== null ? "'" . floatval($longitude) . "'" : 'NULL';
 
-    $latitude = null;
-    $longitude = null;
+    $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
-    $geo_response = @file_get_contents($geo_url);
-    if ($geo_response !== false) {
-        $geo_data = json_decode($geo_response, true);
-        if ($geo_data['status'] === 'OK' && isset($geo_data['results'][0])) {
-            $latitude = $geo_data['results'][0]['geometry']['location']['lat'];
-            $longitude = $geo_data['results'][0]['geometry']['location']['lng'];
-        }
-    }
-
-    $lat_val = $latitude !== null ? $latitude : 'NULL';
-    $lng_val = $longitude !== null ? $longitude : 'NULL';
-
-    $query = "INSERT INTO students (name, email, phone, reg_no, year_of_study, password, address, latitude, longitude) 
-              VALUES ('$name', '$email', '$phone', '$department', '$year_of_study', '$password', '$address', $lat_val, $lng_val)";
+    $query = "INSERT INTO students (name, email, phone, reg_no, blood_group, password, address, latitude, longitude)
+              VALUES ('$name', '$email', '$phone', '$department', '$blood_group', '$password_hash', '$address', $lat_val, $lng_val)";
     $result = mysqli_query($db->connection, $query);
 
     if ($result) {
@@ -237,23 +240,50 @@ public function schedule_seminar() {
     }
 }
 
+// Verify a plaintext password against a stored value, transparently upgrading
+// legacy plaintext rows to a bcrypt hash on the first successful login.
+// Returns true if the password matches (BL-12 / BL-13).
+private function verify_password($plain, $stored, $table, $pk_col, $pk_val) {
+    // Modern path: stored value is a password_hash() result.
+    $info = password_get_info($stored);
+    if ($info['algo']) {
+        return password_verify($plain, $stored);
+    }
+    // Legacy path: stored value is plaintext from before hashing existed.
+    // Constant-time compare, then migrate the row to a hash.
+    if (hash_equals((string)$stored, (string)$plain)) {
+        $new_hash = password_hash($plain, PASSWORD_DEFAULT);
+        $pk_val = intval($pk_val);
+        if ($stmt = mysqli_prepare($this->connection, "UPDATE `$table` SET `password` = ? WHERE `$pk_col` = ?")) {
+            mysqli_stmt_bind_param($stmt, "si", $new_hash, $pk_val);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
+        }
+        return true;
+    }
+    return false;
+}
+
 public function user_login() {
 
   if (isset($_POST['btn_user_login'])) {
 
-    $role = $this->check($_POST['role']);
+    $role = $_POST['role'] ?? '';
 
     if ($role == 'student') {
-      // student login via reg_no only
-      $reg_no = $this->check($_POST['reg_no']);
-      $password = $_POST['student_password'];
+      // Donor login by reg_no + password (prepared statement — BL-13)
+      $reg_no   = trim($_POST['reg_no'] ?? '');
+      $password = $_POST['student_password'] ?? '';
 
-      $query = "SELECT * FROM students WHERE reg_no = '$reg_no' AND password ='$password' LIMIT 1";
-      $result = mysqli_query($this->connection, $query);
+      $user = null;
+      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM students WHERE reg_no = ? LIMIT 1")) {
+        mysqli_stmt_bind_param($stmt, "s", $reg_no);
+        mysqli_stmt_execute($stmt);
+        $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+      }
 
-      if (mysqli_num_rows($result) > 0) {
-        $user = mysqli_fetch_assoc($result);
-
+      if ($user && $this->verify_password($password, $user['password'], 'students', 'student_id', $user['student_id'])) {
         $_SESSION['Active'] = 'Active';
         $_SESSION['role'] = 'student';
         $_SESSION['user_id'] = $user['student_id'];
@@ -267,7 +297,7 @@ public function user_login() {
         </script>
 <?php
       } else {
-        $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid Registration Number!</div>');
+        $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid Donor ID or password!</div>');
 ?>
         <script>
           setTimeout(() => document.getElementById('msg').style.display = "none", 2000);
@@ -277,20 +307,24 @@ public function user_login() {
     }
 
     elseif ($role == 'recipient') {
-            // recipient login check
-            $reg_no = $this->check($_POST['recipient_email']);
-            $password = $_POST['recipient_password'];
+            // Recipient login by email or id + password (prepared statement — BL-13)
+            $login    = trim($_POST['recipient_email'] ?? '');
+            $password = $_POST['recipient_password'] ?? '';
 
-            $query = "SELECT * FROM recipients WHERE email = '$reg_no' OR recipient_id = '$reg_no' LIMIT 1";
-            $result = mysqli_query($this->connection, $query);
+            $user = null;
+            if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM recipients WHERE email = ? OR recipient_id = ? LIMIT 1")) {
+                $login_id = intval($login);
+                mysqli_stmt_bind_param($stmt, "si", $login, $login_id);
+                mysqli_stmt_execute($stmt);
+                $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+                mysqli_stmt_close($stmt);
+            }
 
-            if ($result && mysqli_num_rows($result) > 0) {
-                $user = mysqli_fetch_assoc($result);
-
-                if (password_verify($password, $user['password'])) {
+            if ($user && $this->verify_password($password, $user['password'], 'recipients', 'recipient_id', $user['recipient_id'])) {
                     $_SESSION['Active'] = 'Active';
                     $_SESSION['role'] = 'recipient';
                     $_SESSION['user_id'] = $user['recipient_id'];
+                    $_SESSION['recipient_id'] = $user['recipient_id'];
                     $_SESSION['name'] = $user['name'];
 
                     $this->set_message('<div class="alert alert-success text-center">Login Successful!</div>');
@@ -299,35 +333,30 @@ public function user_login() {
                     setTimeout(() => window.location.href = "recipient_dashboard.php", 1500);
                     </script>
                     <?php
-                } else {
-                    $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid Password</div>');
+            } else {
+                    $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid email or password</div>');
                     ?>
                     <script>
                     setTimeout(() => document.getElementById('msg').style.display = "none", 2000);
                     </script>
                     <?php
-                }
-            } else {
-                $this->set_message('<div class="alert alert-danger text-center" id="msg">Recipient not found</div>');
-                ?>
-                <script>
-                setTimeout(() => document.getElementById('msg').style.display = "none", 2000);
-                </script>
-                <?php
             }
         }
-        
+
     elseif ($role == 'supervisor') {
-      // supervisor login via email + password
-      $email = $this->check($_POST['email']);
-      $password = $this->check($_POST['password']);
-      $query = "SELECT * FROM staff WHERE email = '$email' AND password = '$password' LIMIT 1"; 
-      // (for now, password = phone — replace later with real password column)
-      $result = mysqli_query($this->connection, $query);
+      // Officer login by email + password (prepared statement — BL-13)
+      $email    = trim($_POST['email'] ?? '');
+      $password = $_POST['password'] ?? '';
 
-      if (mysqli_num_rows($result) > 0) {
-        $user = mysqli_fetch_assoc($result);
+      $user = null;
+      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM staff WHERE email = ? LIMIT 1")) {
+        mysqli_stmt_bind_param($stmt, "s", $email);
+        mysqli_stmt_execute($stmt);
+        $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+        mysqli_stmt_close($stmt);
+      }
 
+      if ($user && $this->verify_password($password, $user['password'], 'staff', 'staff_id', $user['staff_id'])) {
         $_SESSION['Active'] = 'Active';
         $_SESSION['role'] = 'supervisor';
         $_SESSION['user_id'] = $user['staff_id'];
@@ -1495,27 +1524,30 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
         }
 
 
-        //Admin Login 
+        //Admin Login
      protected function app_login($a, $b){
 
-        $query = "SELECT * FROM login WHERE USERNAME LIKE '$a' AND PASSWORD LIKE '$b' And PW_STATUS LIKE 'Active'";
-        $result = mysqli_query($this->connection, $query);
-        $data = mysqli_fetch_assoc($result);
+        // Prepared statement + exact match. The old query used LIKE on both
+        // USERNAME and PASSWORD, so a password of "%" matched every account
+        // and any wildcard leaked in (BL-12 / BL-13). Look the user up by
+        // username only, then verify the password (with legacy-plaintext
+        // migration) in PHP.
+        $data = null;
+        if ($stmt = mysqli_prepare($this->connection,
+                "SELECT * FROM login WHERE USERNAME = ? AND PW_STATUS = 'Active' LIMIT 1")) {
+            mysqli_stmt_bind_param($stmt, "s", $a);
+            mysqli_stmt_execute($stmt);
+            $data = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
+            mysqli_stmt_close($stmt);
+        }
 
-        if (mysqli_num_rows($result) > 0) {
-
+        if ($data && $this->verify_password($b, $data['PASSWORD'], 'login', 'user_id', $data['user_id'])) {
                $_SESSION['user'] = $data["user_id"];
                $_SESSION['Active'] = 'Active';
                $_SESSION['role'] = 'admin';
-
-             
-            
-
-            return true;
-            # code...
-        }else{
-            return false;
+               return true;
         }
+        return false;
 
     }
 
@@ -1629,7 +1661,9 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
 
             // 3. Add donated units to stock
-            $query = "UPDATE blood_stock SET units_available = units_available + '$units' WHERE blood_group = '$blood_group'";
+            // NOTE: blood_stock keys on blood_type (see db/schema.sql). This used to say
+            // blood_group, which is the column name manage_blood_stock.php never used.
+            $query = "UPDATE blood_stock SET units_available = units_available + '$units' WHERE blood_type = '$blood_group'";
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
 
             // 4. If tied to a request, update its status and draw the units back down from stock
@@ -1643,15 +1677,19 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
                     if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
                 }
 
-                $query = "UPDATE blood_stock SET units_available = GREATEST(units_available - '$units', 0) WHERE blood_group = '$blood_group'";
+                $query = "UPDATE blood_stock SET units_available = GREATEST(units_available - '$units', 0) WHERE blood_type = '$blood_group'";
                 if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
             }
 
             // 5. Resolve any related stock alert now that stock improved (non-critical, don't throw)
+            // stock_alerts joins blood_stock on blood_type and uses 'active'/'resolved'
+            // (manage_blood_stock.php's vocabulary). This used to join on a stock_id
+            // column that does not exist and look for status 'unresolved', so it
+            // silently matched nothing and alerts were never cleared by a donation.
             $query = "UPDATE stock_alerts sa
-                      JOIN blood_stock bs ON bs.stock_id = sa.stock_id
-                      SET sa.status = 'resolved'
-                      WHERE bs.blood_group = '$blood_group' AND bs.units_available > bs.low_stock_threshold AND sa.status = 'unresolved'";
+                      JOIN blood_stock bs ON bs.blood_type = sa.blood_type
+                      SET sa.status = 'resolved', sa.resolved_at = NOW()
+                      WHERE bs.blood_type = '$blood_group' AND bs.units_available >= bs.low_stock_threshold AND sa.status = 'active'";
             mysqli_query($db->connection, $query);
 
             mysqli_commit($db->connection);
@@ -1721,5 +1759,94 @@ public function mark_attendance($supervisor_id, $student_id, $project_id, $date,
 
 }
 
+
+// ===================== ACCESS-CONTROL HELPERS (BL-25) =====================
+// Call these at the very top of a page, before any HTML output, so the
+// redirect header can be sent. They give every protected page a consistent
+// guard instead of the ad-hoc (and sometimes missing) checks scattered around.
+
+if (!function_exists('bl_require_login')) {
+    function bl_require_login() {
+        if (empty($_SESSION['role']) || empty($_SESSION['Active'])) {
+            header('Location: user-login.php');
+            exit;
+        }
+    }
+}
+
+if (!function_exists('bl_require_role')) {
+    function bl_require_role($roles) {
+        bl_require_login();
+        $roles = (array)$roles;
+        if (!in_array($_SESSION['role'], $roles, true)) {
+            // Logged in but wrong role — send to the admin login as a safe default.
+            header('Location: login.php');
+            exit;
+        }
+    }
+}
+
+// ===================== CSRF PROTECTION (BL-14) =====================
+// bl_csrf_field() prints a hidden input for forms; bl_csrf_check() verifies it
+// on POST. Token lives in the session for the whole login.
+
+if (!function_exists('bl_csrf_token')) {
+    function bl_csrf_token() {
+        if (empty($_SESSION['csrf_token'])) {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+        return $_SESSION['csrf_token'];
+    }
+}
+
+if (!function_exists('bl_csrf_field')) {
+    function bl_csrf_field() {
+        echo '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(bl_csrf_token()) . '">';
+    }
+}
+
+if (!function_exists('bl_csrf_check')) {
+    function bl_csrf_check() {
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') return;
+        $sent = $_POST['csrf_token'] ?? '';
+        if (empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $sent)) {
+            http_response_code(419);
+            die('Invalid or expired form token. Please go back and try again.');
+        }
+    }
+}
+
+// ===================== GEOCODING (Phase 3, BL-05 / BL-15) =====================
+// Address -> [lat, lng] via OpenStreetMap Nominatim. Free, no API key. This
+// replaces the hardcoded Google Geocoding call. Nominatim's usage policy caps
+// callers at ~1 request/second and REQUIRES a descriptive User-Agent — so this
+// is only ever called once, at write time (registration / request creation),
+// never in a loop on page load. Returns [null, null] on any failure so callers
+// can store NULL coordinates and carry on.
+if (!function_exists('bl_geocode')) {
+    function bl_geocode($address) {
+        $address = trim((string)$address);
+        if ($address === '') return [null, null];
+
+        // Bias results to Nigeria; callers pass a plain address.
+        $url = 'https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ng&q='
+             . urlencode($address . ', Nigeria');
+
+        $ctx = stream_context_create(['http' => [
+            'method'  => 'GET',
+            'header'  => "User-Agent: BloodLink/1.0 (blood bank management system)\r\nAccept: application/json\r\n",
+            'timeout' => 6,
+        ]]);
+
+        $resp = @file_get_contents($url, false, $ctx);
+        if ($resp === false) return [null, null];
+
+        $data = json_decode($resp, true);
+        if (!empty($data[0]['lat']) && !empty($data[0]['lon'])) {
+            return [(float)$data[0]['lat'], (float)$data[0]['lon']];
+        }
+        return [null, null];
+    }
+}
 
 ?>

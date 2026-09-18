@@ -23,13 +23,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    // Ensure user is allowed to send: if role=supervisor ensure session id matches supervisor_id, if student ensure student id matches
-    if ($role === 'supervisor' && intval($_SESSION['supervisor_id']) !== $supervisor_id) {
-        echo json_encode(['success'=>false, 'error'=>'Not authorized']);
-        exit;
-    }
-    if ($role === 'student' && intval($_SESSION['user_id']) !== $student_id) {
-        echo json_encode(['success'=>false, 'error'=>'Not authorized']);
+    // A sender must be a logged-in supervisor or student, sending as their own
+    // identity. The old code only checked identity *if* the role was one of
+    // those two — a request with no session, or any other role, fell through
+    // both checks and wrote the message (BL-11). Reject anything that is not an
+    // authenticated, identity-matched send.
+    if ($role === 'supervisor') {
+        if (intval($_SESSION['supervisor_id'] ?? 0) !== $supervisor_id || $sender !== 'supervisor') {
+            echo json_encode(['success'=>false, 'error'=>'Not authorized']);
+            exit;
+        }
+    } elseif ($role === 'student') {
+        if (intval($_SESSION['user_id'] ?? 0) !== $student_id || $sender !== 'student') {
+            echo json_encode(['success'=>false, 'error'=>'Not authorized']);
+            exit;
+        }
+    } else {
+        // No session, or a role with no business in this thread.
+        echo json_encode(['success'=>false, 'error'=>'Not logged in']);
         exit;
     }
 

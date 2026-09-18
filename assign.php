@@ -21,6 +21,7 @@ if (isset($_GET['delete_id'])) {
 }
 
 // Handle assignment submission
+bl_csrf_check();      // BL-14
 $dbb->add_project();
 ?>
 
@@ -48,6 +49,7 @@ $dbb->add_project();
                     <div class="col-lg-5 border-end pe-lg-4 mb-4 mb-lg-0">
                         <h5 class="mb-3 text-secondary">New Assignment Form</h5>
                         <form action="" method="POST">
+                            <?php bl_csrf_field(); // BL-14 ?>
                             <div class="mb-3">
                                 <label for="title" class="form-label fw-bold">Blood Bank / Hospital Location</label>
                                 <input type="text" class="form-control" id="title" name="title" placeholder="e.g. Aminu Kano Teaching Hospital, Kano" required>

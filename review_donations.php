@@ -15,6 +15,7 @@ $dbb = new operations();
 // Handle review form submission
 $success = $error = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'review_entry') {
+    bl_csrf_check();      // BL-14
     $log_id = isset($_POST['log_id']) ? intval($_POST['log_id']) : 0;
     $status = isset($_POST['status']) ? $_POST['status'] : 'pending';
     $comment = isset($_POST['supervisor_comment']) ? trim($_POST['supervisor_comment']) : '';
@@ -113,6 +114,7 @@ $entries_overview = $dbb->get_supervisor_logbook_entries($supervisor_id);
 
                                     <!-- quick action form: approve -->
                                     <form method="post" style="display:inline-block;">
+                                        <?php bl_csrf_field(); // BL-14 ?>
                                         <input type="hidden" name="action" value="review_entry">
                                         <input type="hidden" name="log_id" value="<?php echo intval($row['log_id']); ?>">
                                         <input type="hidden" name="status" value="approved">
@@ -122,6 +124,7 @@ $entries_overview = $dbb->get_supervisor_logbook_entries($supervisor_id);
 
                                     <!-- quick action: reject -->
                                     <form method="post" style="display:inline-block;" onsubmit="return confirm('Reject this donation record?');">
+                                        <?php bl_csrf_field(); // BL-14 ?>
                                         <input type="hidden" name="action" value="review_entry">
                                         <input type="hidden" name="log_id" value="<?php echo intval($row['log_id']); ?>">
                                         <input type="hidden" name="status" value="rejected">
@@ -174,6 +177,7 @@ $entries_overview = $dbb->get_supervisor_logbook_entries($supervisor_id);
                             <hr>
 
                             <form method="post" class="mt-2">
+                                <?php bl_csrf_field(); // BL-14 ?>
                                 <input type="hidden" name="action" value="review_entry">
                                 <input type="hidden" name="log_id" value="<?php echo intval($entry['log_id']); ?>">
 

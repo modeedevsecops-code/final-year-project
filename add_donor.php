@@ -12,6 +12,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 }
 
 $dbb = new operations();
+bl_csrf_check();          // BL-14
 $dbb->add_student(); // Call the function to handle donor addition
 ?>
 
@@ -31,6 +32,7 @@ $dbb->add_student(); // Call the function to handle donor addition
                 <?php $dbb->display_message() ?>
                 
                 <form action="" method="POST">
+                    <?php bl_csrf_field(); // BL-14 ?>
                     <div class="mb-3">
                         <label for="name" class="form-label fw-bold">Donor Full Name</label>
                         <input type="text" class="form-control" id="name" name="name" placeholder="e.g. John Doe" required>
