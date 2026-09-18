@@ -173,6 +173,93 @@ function insert_student($name, $email, $phone, $department, $blood_group, $passw
     }
 }
 
+// Admin creates a recipient account. Was referenced by add_recipient.php but
+// never implemented (fatal for admins). Password hashed, address geocoded.
+public function add_recipient() {
+    global $db;
+    if (!isset($_POST['btn_add_recipient'])) return;
+
+    bl_csrf_check(); // BL-14
+
+    $name        = $db->check(trim($_POST['name'] ?? ''));
+    $email       = $db->check(trim($_POST['email'] ?? ''));
+    $phone       = $db->check(trim($_POST['phone'] ?? ''));
+    $blood_group = $db->check(trim($_POST['blood_group'] ?? ''));
+    $address_raw = trim($_POST['address'] ?? '');
+    $address     = $db->check($address_raw);
+    $password    = trim($_POST['password'] ?? '');
+
+    if ($name === '' || $email === '' || $phone === '' || $password === '') {
+        $this->set_message('<div class="alert alert-danger">Please fill in name, email, phone and password.</div>');
+        return;
+    }
+
+    // Duplicate email guard (prepared).
+    if ($stmt = mysqli_prepare($db->connection, "SELECT recipient_id FROM recipients WHERE email = ? LIMIT 1")) {
+        mysqli_stmt_bind_param($stmt, "s", $email);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_store_result($stmt);
+        $dup = mysqli_stmt_num_rows($stmt) > 0;
+        mysqli_stmt_close($stmt);
+        if ($dup) {
+            $this->set_message('<div class="alert alert-danger">That email is already registered.</div>');
+            return;
+        }
+    }
+
+    list($lat, $lng) = bl_geocode($address_raw);
+    $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'NULL';
+    $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'NULL';
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+
+    $query = "INSERT INTO recipients (name, email, phone, address, blood_group, latitude, longitude, password)
+              VALUES ('$name', '$email', '$phone', '$address', '$blood_group', $lat_sql, $lng_sql, '$hash')";
+    if (mysqli_query($db->connection, $query)) {
+        $this->set_message('<div class="alert alert-success text-center">Recipient added successfully.</div>');
+        echo '<script>setTimeout(() => window.location.href = "manage_recipients.php", 1500);</script>';
+    } else {
+        $this->set_message('<div class="alert alert-danger">Failed to add recipient.</div>');
+    }
+}
+
+// Fetch a single recipient (admin edit).
+public function get_recipient_by_id($id) {
+    global $db;
+    $id = intval($id);
+    $res = mysqli_query($db->connection, "SELECT * FROM recipients WHERE recipient_id = $id LIMIT 1");
+    return $res ? mysqli_fetch_assoc($res) : null;
+}
+
+// Admin updates a recipient (password left unchanged here).
+public function update_recipient($id) {
+    global $db;
+    if (!isset($_POST['btn_update_recipient'])) return;
+    bl_csrf_check(); // BL-14
+
+    $id          = intval($id);
+    $name        = $db->check(trim($_POST['name'] ?? ''));
+    $email       = $db->check(trim($_POST['email'] ?? ''));
+    $phone       = $db->check(trim($_POST['phone'] ?? ''));
+    $blood_group = $db->check(trim($_POST['blood_group'] ?? ''));
+    $address_raw = trim($_POST['address'] ?? '');
+    $address     = $db->check($address_raw);
+
+    list($lat, $lng) = bl_geocode($address_raw);
+    $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'latitude';
+    $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'longitude';
+
+    $query = "UPDATE recipients
+              SET name='$name', email='$email', phone='$phone', address='$address',
+                  blood_group='$blood_group', latitude=$lat_sql, longitude=$lng_sql
+              WHERE recipient_id=$id";
+    if (mysqli_query($db->connection, $query)) {
+        $this->set_message('<div class="alert alert-success text-center">Recipient updated.</div>');
+        echo '<script>setTimeout(() => window.location.href = "manage_recipients.php", 1500);</script>';
+    } else {
+        $this->set_message('<div class="alert alert-danger">Failed to update recipient.</div>');
+    }
+}
+
 public function add_supervisor() {
     global $db;
 
