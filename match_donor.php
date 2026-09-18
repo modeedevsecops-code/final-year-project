@@ -40,12 +40,9 @@ $has_request_geo = $request && is_numeric($request['latitude'] ?? null) && is_nu
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Match Donor - BloodLink</title>
-<link rel="stylesheet" href="assets/css/sidebar.css">
-</head>
+<?php include 'inc/header.php'; // theme.css + Font Awesome + sidebar.css, like every other page ?>
 <body>
+<main class="main" id="top">
 <?php include 'inc/navbar.php'; ?>
 
 <div class="main-content">
@@ -123,5 +120,7 @@ $has_request_geo = $request && is_numeric($request['latitude'] ?? null) && is_nu
 
   <?php endif; ?>
 </div>
+</main>
+<?php include 'inc/main_js.php'; ?>
 </body>
 </html>

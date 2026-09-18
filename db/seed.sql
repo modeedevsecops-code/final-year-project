@@ -32,6 +32,7 @@
 --  row to a hash on first successful login.
 -- ============================================================================
 
+SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 TRUNCATE TABLE `stock_alerts`;
 TRUNCATE TABLE `blood_stock`;

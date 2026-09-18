@@ -35,6 +35,10 @@ class dbconfig
         if (mysqli_connect_error()) {
             die("Connection Failed");
         }
+
+        // Match the schema's utf8mb4 so multibyte characters (e.g. the en-dash
+        // in "Officer – Hospital") don't come back as mojibake.
+        mysqli_set_charset($this->connection, 'utf8mb4');
     }
 
     public function check($a)
