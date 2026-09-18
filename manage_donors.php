@@ -126,7 +126,7 @@ include 'inc/header.php';
                         <td>' . $student['email'] . '</td>
                         <td>' . $student['phone'] . '</td>
                         <td>' . $student['reg_no'] . '</td>
-                        <td><span class="badge bg-danger">' . (isset($student['year_of_study']) ? $student['year_of_study'] : 'N/A') . '</span></td>
+                        <td><span class="badge bg-danger">' . htmlspecialchars($student['blood_group'] ?? 'N/A') . '</span></td>
                         <td>
                           <a href="edit_donor.php?id=' . $student['student_id'] . '" class="btn btn-warning btn-sm">Edit</a>
                           <form action="" method="POST" style="display:inline;">

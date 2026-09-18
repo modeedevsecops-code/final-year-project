@@ -1,19 +1,26 @@
 <?php
-// session_start();
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
-// Redirect non-officers
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'supervisor') {
+// Admins and officers both reach this page from their sidebars. Officers see
+// their own assigned donors; admins see every assignment. Was supervisor-only,
+// which bounced admins to the login form.
+if (empty($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervisor'], true)) {
   header('Location: login.php');
   exit;
 }
 
-// Hospital officer id from login flow
-$supervisor_id = intval($_SESSION['supervisor_id']);
-
 $dbb = new operations();
-$students = $dbb->get_assigned_students($supervisor_id);
+$is_admin = ($_SESSION['role'] === 'admin');
+
+if ($is_admin) {
+    $students = $dbb->get_all_assignments();          // every donor↔officer assignment
+    $backLink = 'dashboard.php';
+} else {
+    $supervisor_id = intval($_SESSION['supervisor_id']);
+    $students = $dbb->get_assigned_students($supervisor_id);
+    $backLink = 'officer_dashboard.php';
+}
+require_once 'inc/header.php';
 ?>
 
 <!DOCTYPE html>
@@ -23,8 +30,8 @@ $students = $dbb->get_assigned_students($supervisor_id);
   <?php include 'inc/navbar.php'; ?>
   <div class="container py-5 mt-5">
     <div class="d-flex justify-content-between align-items-center mb-4">
-      <h3 class="mb-0">My Assigned Donors</h3>
-      <a href="officer_dashboard.php" class="btn btn-outline-secondary">Back to Dashboard</a>
+      <h3 class="mb-0"><?php echo $is_admin ? 'All Assigned Donors' : 'My Assigned Donors'; ?></h3>
+      <a href="<?php echo $backLink; ?>" class="btn btn-outline-secondary">Back to Dashboard</a>
     </div>
 
     <div class="card">
@@ -42,6 +49,7 @@ $students = $dbb->get_assigned_students($supervisor_id);
                   <th>Email</th>
                   <th>Phone</th>
                   <th>Blood Type</th>
+                  <?php if ($is_admin): ?><th>Assigned Officer</th><?php endif; ?>
                   <th>Donation Status</th>
                   <th>Actions</th>
                 </tr>
@@ -57,15 +65,22 @@ $students = $dbb->get_assigned_students($supervisor_id);
                     <td><?php echo htmlspecialchars($row['phone']); ?></td>
                     <td>
                       <span class="badge bg-danger">
-                        <?php echo htmlspecialchars(isset($row['year_of_study']) ? $row['year_of_study'] : 'N/A'); ?>
+                        <?php echo htmlspecialchars($row['blood_group'] ?? 'N/A'); ?>
                       </span>
                     </td>
+                    <?php if ($is_admin): ?>
+                      <td><?php echo htmlspecialchars($row['officer_name'] ?? '—'); ?></td>
+                    <?php endif; ?>
                     <td><?php echo htmlspecialchars($row['status']); ?></td>
                     <td>
-                      <a href="officer_chat.php?student_id=<?php echo urlencode($row['student_id']); ?>"
-                        class="btn btn-sm btn-success">Chat</a>
-                      <a href="officer_comments.php?student_id=<?php echo urlencode($row['student_id']); ?>"
-                        class="btn btn-sm btn-danger">Review Donations</a>
+                      <?php if (!$is_admin): ?>
+                        <a href="officer_chat.php?student_id=<?php echo urlencode($row['student_id']); ?>"
+                          class="btn btn-sm btn-success">Chat</a>
+                        <a href="officer_comments.php?student_id=<?php echo urlencode($row['student_id']); ?>"
+                          class="btn btn-sm btn-danger">Review Donations</a>
+                      <?php else: ?>
+                        <span style="color:#999; font-size:.85rem;">—</span>
+                      <?php endif; ?>
                     </td>
                   </tr>
                 <?php endforeach; ?>

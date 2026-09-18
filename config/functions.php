@@ -1225,7 +1225,7 @@ public function get_assigned_students($supervisor_id) {
     $sid = intval($supervisor_id);
 
     $sql = "
-      SELECT 
+      SELECT
         p.project_id,
         p.title,
         p.status,
@@ -1235,7 +1235,7 @@ public function get_assigned_students($supervisor_id) {
         s.email,
         s.phone,
         s.reg_no,
-        s.year_of_study
+        s.blood_group
       FROM projects p
       INNER JOIN students s ON p.assigned_student = s.student_id
       WHERE p.assigned_supervisor = {$sid}
@@ -1250,6 +1250,21 @@ public function get_assigned_students($supervisor_id) {
     }
 
     return mysqli_fetch_all($res, MYSQLI_ASSOC);
+}
+
+// Every donor↔officer assignment (admin view of assigned_donors.php).
+public function get_all_assignments() {
+    global $db;
+    $sql = "
+      SELECT p.project_id, p.title, p.status, p.created_at,
+             s.student_id, s.name, s.email, s.phone, s.reg_no, s.blood_group,
+             st.staff_name AS officer_name
+      FROM projects p
+      INNER JOIN students s ON p.assigned_student = s.student_id
+      LEFT JOIN staff st ON st.staff_id = p.assigned_supervisor
+      ORDER BY s.name ASC";
+    $res = mysqli_query($db->connection, $sql);
+    return $res ? mysqli_fetch_all($res, MYSQLI_ASSOC) : [];
 }
 
 
