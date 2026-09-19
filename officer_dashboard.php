@@ -2,87 +2,78 @@
 if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
-include 'inc/header.php';
+require_once 'config/db.php';
 
-// Redirect if not an officer
+// Officers only
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'supervisor') {
     header("Location: login.php");
     exit();
 }
 
 $officer_name = $_SESSION['name'] ?? 'Hospital Officer';
+include 'inc/header.php';
 ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
-
-<head>
-    <title>BloodLink | Officer Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="assets/css/theme.css">
-    <link rel="stylesheet" href="assets/css/dashboard_layout.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-</head>
-
 <body>
+<main class="main" id="top">
+    <?php include 'inc/navbar.php'; ?>
 
-<div class="dashboard-container">
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar">
-        <div class="sidebar-brand">
-            <h2>BloodLink Officer</h2>
-        </div>
-        <ul class="sidebar-menu">
-            <li class="active"><a href="officer_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a href="assigned_donors.php"><i class="fas fa-users"></i> Assigned Donors</a></li>
-            <li><a href="blood_requests.php"><i class="fas fa-exclamation-circle"></i> Blood Requests</a></li>
-            <li><a href="add_donor.php"><i class="fas fa-user-plus"></i> Add Donor Record</a></li>
-            <li><a href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        </ul>
-    </aside>
+    <div class="main-content">
+        <div class="container-fluid">
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-        <!-- Top Navbar -->
-        <header class="top-navbar">
-            <div class="user-profile">
-                <span class="user-name"><?php echo htmlspecialchars($officer_name); ?></span>
-                <div class="avatar"><?php echo strtoupper(substr($officer_name, 0, 2)); ?></div>
-            </div>
-        </header>
-
-        <!-- Content Body -->
-        <div class="content-body">
-            <!-- Hero Banner -->
             <div class="welcome-banner">
-                <div class="banner-text">
-                    <span class="badge">OFFICER PORTAL</span>
-                    <h1>Welcome back, <?php echo htmlspecialchars($officer_name); ?>!</h1>
-                    <p>Monitor assigned donors, review incoming blood requests, and coordinate inventory.</p>
+                <span class="badge-pill">OFFICER PORTAL</span>
+                <h1>Welcome back, <?php echo htmlspecialchars($officer_name); ?>!</h1>
+                <p>Monitor assigned donors, review incoming blood requests, and coordinate inventory.</p>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-md-4 col-sm-6">
+                    <div class="quick-card">
+                        <div class="quick-icon"><i class="fas fa-users"></i></div>
+                        <h3>Donors</h3>
+                        <p>Browse the donor pool with blood group and current eligibility.</p>
+                        <a href="assigned_donors.php" class="btn btn-danger mt-auto">View Donors</a>
+                    </div>
                 </div>
-                <a href="blood_requests.php" class="btn-primary">Manage Requests</a>
+                <div class="col-md-4 col-sm-6">
+                    <div class="quick-card">
+                        <div class="quick-icon"><i class="fas fa-hand-holding-medical"></i></div>
+                        <h3>Blood Requests</h3>
+                        <p>Review pending requests and match them to eligible, nearest donors.</p>
+                        <a href="blood_requests.php" class="btn btn-danger mt-auto">Manage Requests</a>
+                    </div>
+                </div>
+                <div class="col-md-4 col-sm-6">
+                    <div class="quick-card">
+                        <div class="quick-icon"><i class="fas fa-bell"></i></div>
+                        <h3>Emergency Alerts</h3>
+                        <p>Post urgent blood alerts and see system-generated emergencies.</p>
+                        <a href="notices.php" class="btn btn-outline-danger mt-auto">View Alerts</a>
+                    </div>
+                </div>
+                <div class="col-md-6 col-sm-6">
+                    <div class="quick-card">
+                        <div class="quick-icon"><i class="fas fa-map-marker-alt"></i></div>
+                        <h3>Geo-Map</h3>
+                        <p>See donors and open requests on the live map.</p>
+                        <a href="geo_map.php" class="btn btn-outline-danger mt-auto">Open Map</a>
+                    </div>
+                </div>
+                <div class="col-md-6 col-sm-6">
+                    <div class="quick-card">
+                        <div class="quick-icon"><i class="fas fa-sign-out-alt"></i></div>
+                        <h3>Logout</h3>
+                        <p>Sign out of your BloodLink officer account securely.</p>
+                        <a href="logout.php" class="btn btn-outline-secondary mt-auto">Logout</a>
+                    </div>
+                </div>
             </div>
 
-            <!-- Action Cards Grid -->
-            <div class="cards-grid">
-                <a href="assigned_donors.php" class="dashboard-card" style="text-decoration: none;">
-                    <i class="fas fa-users"></i>
-                    <h3>Assigned Donors</h3>
-                    <p>View and manage the donors assigned to your hospital or blood bank branch.</p>
-                </a>
-                <a href="blood_requests.php" class="dashboard-card" style="text-decoration: none;">
-                    <i class="fas fa-tint"></i>
-                    <h3>Incoming Requests</h3>
-                    <p>Review pending blood requests and coordinate emergency notifications.</p>
-                </a>
-                <a href="add_donor.php" class="dashboard-card" style="text-decoration: none;">
-                    <i class="fas fa-user-plus"></i>
-                    <h3>Add Donor Record</h3>
-                    <p>Register new donor profiles and log walk-in donations manually.</p>
-                </a>
-            </div>
         </div>
-    </main>
-</div>
-
+    </div>
+</main>
+<?php include 'inc/main_js.php'; ?>
 </body>
 </html>

@@ -1,11 +1,14 @@
 <?php
-// Include necessary files and database connection
-include 'inc/header.php';
+// DB + session first (no output yet), then guard, THEN header (which emits HTML).
 include 'config/db.php';
+bl_require_role('admin');   // BL-25: this page leaked every donor name/email to anyone.
 
 $dbb = new operations();
+bl_csrf_check();        // BL-14 (covers both add and delete POSTs below)
 $dbb->add_student(); // Handles adding a new donor
 $dbb->delete_student(); // Handles deleting a donor
+
+include 'inc/header.php';
 ?>
 
 <!DOCTYPE html>
@@ -20,13 +23,9 @@ $dbb->delete_student(); // Handles deleting a donor
           <h2>Manage Blood Donors</h2>
           <?php $dbb->display_message() ?>
 
-          <!-- Button to assign hospital officer -->
-          <a href="assign.php" type="button" class="btn btn-success mb-3">
-            Assign Hospital Officer
-          </a>
-
           <!-- Form to add a new donor -->
           <form action="" method="POST">
+            <?php bl_csrf_field(); // BL-14 ?>
 
             <div class="form-group">
               <label for="name">Full Name</label>
@@ -95,7 +94,7 @@ $dbb->delete_student(); // Handles deleting a donor
 
           <!-- Table to display donors -->
           <h3 class="mt-5">Registered Donors</h3>
-          <form method="POST" action="export_students.php">
+          <form method="POST" action="export_donors.php">
             <button type="submit" class="btn btn-outline-success mb-3">Export to Excel</button>
           </form>
 
@@ -122,10 +121,11 @@ $dbb->delete_student(); // Handles deleting a donor
                         <td>' . $student['email'] . '</td>
                         <td>' . $student['phone'] . '</td>
                         <td>' . $student['reg_no'] . '</td>
-                        <td><span class="badge bg-danger">' . (isset($student['year_of_study']) ? $student['year_of_study'] : 'N/A') . '</span></td>
+                        <td><span class="badge bg-danger">' . htmlspecialchars($student['blood_group'] ?? 'N/A') . '</span></td>
                         <td>
                           <a href="edit_donor.php?id=' . $student['student_id'] . '" class="btn btn-warning btn-sm">Edit</a>
                           <form action="" method="POST" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="' . htmlspecialchars(bl_csrf_token()) . '">
                             <input type="hidden" name="student_id" value="' . $student['student_id'] . '">
                             <button type="submit" name="btn_delete_student" class="btn btn-danger btn-sm">Delete</button>
                           </form>

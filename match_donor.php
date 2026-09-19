@@ -14,6 +14,7 @@ $feedback = null;
 
 // --- Handle donor confirmation submit ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_donation'])) {
+    bl_csrf_check(); // BL-14
     $donor_id     = (int)$_POST['donor_id'];
     $recipient_id = !empty($_POST['recipient_id']) ? (int)$_POST['recipient_id'] : null;
     $req_id       = (int)$_POST['request_id'];
@@ -29,17 +30,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_donation'])) 
 }
 
 // --- Load the request + matching donors via the operations class ---
+// Pass the request's coordinates so donors come back ordered nearest-first —
+// the point of the geo feature (blood is time-critical and donors must travel).
 $request = $ops->get_blood_request($request_id);
-$matching_donors = $request ? $ops->find_matching_donors($request['blood_group']) : [];
+$matching_donors = $request
+    ? $ops->find_matching_donors($request['blood_group'], $request['latitude'] ?? null, $request['longitude'] ?? null)
+    : [];
+$has_request_geo = $request && is_numeric($request['latitude'] ?? null) && is_numeric($request['longitude'] ?? null);
 ?>
 <!DOCTYPE html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<title>Match Donor - BloodLink</title>
-<link rel="stylesheet" href="assets/css/sidebar.css">
-</head>
+<?php include 'inc/header.php'; // theme.css + Font Awesome + sidebar.css, like every other page ?>
 <body>
+<main class="main" id="top">
 <?php include 'inc/navbar.php'; ?>
 
 <div class="main-content">
@@ -78,6 +81,7 @@ $matching_donors = $request ? $ops->find_matching_donors($request['blood_group']
           <tr>
             <th>Name</th>
             <th>Blood Group</th>
+            <?php if ($has_request_geo): ?><th>Distance</th><?php endif; ?>
             <th>Last Donation</th>
             <th>Days Since Last</th>
             <th>Contact</th>
@@ -89,11 +93,17 @@ $matching_donors = $request ? $ops->find_matching_donors($request['blood_group']
             <tr>
               <td><?= htmlspecialchars($donor['name']) ?></td>
               <td><?= htmlspecialchars($donor['blood_group']) ?></td>
+              <?php if ($has_request_geo): ?>
+                <td><?= isset($donor['distance_km']) && $donor['distance_km'] !== null
+                        ? htmlspecialchars($donor['distance_km']) . ' km'
+                        : '<span style="color:#999;">no location</span>' ?></td>
+              <?php endif; ?>
               <td><?= $donor['last_donation_date'] ? htmlspecialchars($donor['last_donation_date']) : 'Never donated' ?></td>
               <td><?= $donor['days_since_last_donation'] >= 9999 ? '—' : (int)$donor['days_since_last_donation'] ?></td>
               <td><?= htmlspecialchars($donor['phone']) ?> / <?= htmlspecialchars($donor['email']) ?></td>
               <td>
                 <form method="POST" onsubmit="return confirm('Confirm this donation match?');">
+                  <?php bl_csrf_field(); // BL-14 ?>
                   <input type="hidden" name="donor_id" value="<?= (int)$donor['student_id'] ?>">
                   <input type="hidden" name="recipient_id" value="<?= (int)($request['recipient_id'] ?? 0) ?>">
                   <input type="hidden" name="request_id" value="<?= (int)$request['request_id'] ?>">
@@ -110,5 +120,7 @@ $matching_donors = $request ? $ops->find_matching_donors($request['blood_group']
 
   <?php endif; ?>
 </div>
+</main>
+<?php include 'inc/main_js.php'; ?>
 </body>
 </html>

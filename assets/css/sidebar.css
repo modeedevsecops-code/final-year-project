@@ -179,7 +179,9 @@ body {
     margin-bottom: 0.75rem;
 }
 
-.welcome-banner h1 {
+.welcome-banner h1,
+.welcome-banner h2,
+.welcome-banner h3 {
     font-size: 1.9rem;
     font-weight: 800;
     margin-bottom: 0.5rem;
@@ -276,3 +278,83 @@ body {
         display: block;
     }
 }
+/* ===================================================================
+   Layout fix — offset content on logged-in pages that don't use the
+   .main-content wrapper (many admin/officer pages put their content in a
+   bare .container / section next to the fixed sidebar, so it was sitting
+   UNDER the fixed topbar + sidebar). Scoped to pages that actually render
+   the sidebar, so public pages are untouched.
+   =================================================================== */
+.sidebar ~ .container,
+.sidebar ~ .container-fluid,
+.sidebar ~ section {
+    margin-left: 220px;
+    padding-top: 90px;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+    box-sizing: border-box;
+}
+/* When the sidebar sits inside <main class="main">, the content section is a
+   sibling there too. */
+main.main > section,
+main.main > .container,
+main.main > .container-fluid {
+    box-sizing: border-box;
+}
+@media (max-width: 991px) {
+    .sidebar ~ .container,
+    .sidebar ~ .container-fluid,
+    .sidebar ~ section {
+        margin-left: 0;
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+}
+
+/* ===== Topbar user dropdown (profile + logout) ===== */
+.topbar-user { position: relative; cursor: pointer; user-select: none; }
+.topbar-menu {
+    position: absolute;
+    top: calc(100% + 10px);
+    right: 0;
+    min-width: 210px;
+    background: #fff;
+    border: 1px solid #eee;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    padding: 0.5rem;
+    display: none;
+    z-index: 1050;
+}
+.topbar-menu.open { display: block; }
+.topbar-menu-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.5rem 0.6rem 0.75rem;
+    border-bottom: 1px solid #f0f0f0;
+    margin-bottom: 0.4rem;
+}
+.topbar-menu-head .tm-name { font-weight: 700; color: #333; font-size: 0.92rem; }
+.topbar-menu-head .tm-role { color: #888; font-size: 0.78rem; }
+.topbar-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.6rem 0.7rem;
+    border-radius: 8px;
+    color: #495057;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+}
+.topbar-menu-item i { width: 16px; text-align: center; color: #cc0000; }
+.topbar-menu-item:hover { background: #fdf2f2; color: #7a0000; }
+.topbar-logout { color: #b00020; }
+.topbar-logout i { color: #b00020; }
+
+/* ===== Sidebar separator + logout ===== */
+.sidebar-sep { height: 1px; background: #f0f0f0; margin: 0.6rem 0.5rem; list-style: none; }
+.sidebar-nav .nav-link.sidebar-logout { color: #b00020; }
+.sidebar-nav .nav-link.sidebar-logout i { color: #b00020; }
+.sidebar-nav .nav-link.sidebar-logout:hover { background: #fdeaea; color: #7a0000; }

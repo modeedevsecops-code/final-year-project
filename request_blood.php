@@ -20,10 +20,13 @@ $recipientName = $_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Recipient';
 $errors = [];
 $success = false;
 
-// Ensure recipient_id column exists (safe no-op if already added)
-mysqli_query($db_conn, "ALTER TABLE blood_requests ADD COLUMN IF NOT EXISTS recipient_id INT NULL AFTER request_id");
+// recipient_id is now declared in db/schema.sql. The runtime ALTER that used to
+// live here used MariaDB-only "ADD COLUMN IF NOT EXISTS" syntax, which is a hard
+// SQL syntax error on MySQL — and since PHP 8.1 mysqli throws on it, so it took
+// the whole page down. (BL-26 / BL-27.) The schema owns this column now.
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    bl_csrf_check();      // BL-14
     $patientName   = trim($_POST['patient_name'] ?? '');
     $bloodGroup    = trim($_POST['blood_group'] ?? '');
     $unitsNeeded   = (int)($_POST['units_needed'] ?? 0);
@@ -60,15 +63,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if (empty($errors)) {
+        // Geocode the hospital location once, at submission, so the request
+        // appears on the map (Phase 3, BL-05). NULL coords if it can't be found.
+        list($reqLat, $reqLng) = bl_geocode($hospitalName . ', ' . $location);
+
         $stmt = mysqli_prepare($db_conn,
             "INSERT INTO blood_requests
-                (recipient_id, patient_name, blood_group, units_needed, hospital_name, location, urgency_level, status, requested_by, contact_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)"
+                (recipient_id, patient_name, blood_group, units_needed, hospital_name, location, latitude, longitude, urgency_level, status, requested_by, contact_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)"
         );
         mysqli_stmt_bind_param(
-            $stmt, "ississsss",
+            $stmt, "ississddsss",
             $recipientId, $patientName, $bloodGroup, $unitsNeeded,
-            $hospitalName, $location, $urgencyLevel, $recipientName, $contactPhone
+            $hospitalName, $location, $reqLat, $reqLng, $urgencyLevel, $recipientName, $contactPhone
         );
 
         if (mysqli_stmt_execute($stmt)) {
@@ -222,6 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 </div>
 
                 <form method="POST" action="request_blood.php" id="rbForm" class="rb-actions">
+                    <?php bl_csrf_field(); // BL-14 ?>
                     <a href="recipient_dashboard.php" class="rb-btn rb-btn-ghost">Cancel</a>
                     <button type="submit" class="rb-btn rb-btn-primary">Submit Request</button>
                 </form>

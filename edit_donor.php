@@ -18,6 +18,7 @@ if (isset($_GET['id'])) {
 
 // If the form is submitted, update the donor record
 if (isset($_POST['btn_update_student'])) {
+    bl_csrf_check();      // BL-14
     $dbb->update_student($student_id); // Function to update donor details
 }
 ?>
@@ -44,6 +45,7 @@ if (isset($_POST['btn_update_student'])) {
               </div>
           <?php else: ?>
               <form action="" method="POST">
+                  <?php bl_csrf_field(); // BL-14 ?>
                 <div class="mb-3">
                   <label for="name" class="form-label fw-bold">Donor Full Name</label>
                   <input type="text" class="form-control" id="name" name="name" value="<?php echo htmlspecialchars($student['name']); ?>" required>

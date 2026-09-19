@@ -17,14 +17,17 @@ $dbb = new operations();
 // ─────────────────────────────────────────────────
 $form_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
+    bl_csrf_check();      // BL-14
     $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
     $email = mysqli_real_escape_string($conn, trim($_POST['email']));
     $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
     $position = mysqli_real_escape_string($conn, trim($_POST['position']));
     $hospital = mysqli_real_escape_string($conn, trim($_POST['hospital']));
-    $password = mysqli_real_escape_string($conn, trim($_POST['password']));
+    // Hash the officer password at creation (BL-12).
+    $plain_password = trim($_POST['password']);
+    $password = password_hash($plain_password, PASSWORD_DEFAULT);
 
-    if ($staff_name && $email && $phone && $password) {
+    if ($staff_name && $email && $phone && $plain_password !== '') {
         // Store hospital in position field (repurposed) or add to staff_name
         $full_position = $position . ($hospital ? ' – ' . $hospital : '');
         $q = "INSERT INTO staff (staff_name, phone, email, position, password)
@@ -42,9 +45,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
 // ─────────────────────────────────────────────────
 // Handle: Delete officer
 // ─────────────────────────────────────────────────
-if (isset($_GET['delete_id'])) {
-    $del_id = intval($_GET['delete_id']);
-    mysqli_query($conn, "DELETE FROM staff WHERE staff_id = $del_id");
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    bl_csrf_check(); // BL-14 — was a CSRF-able GET link
+    $del_id = intval($_POST['delete_id']);
+    if ($stmt = mysqli_prepare($conn, "DELETE FROM staff WHERE staff_id = ?")) {
+        mysqli_stmt_bind_param($stmt, "i", $del_id);
+        mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+    }
     header('Location: manage_officers.php?deleted=1');
     exit;
 }
@@ -95,8 +103,7 @@ if ($officers_res) {
                         <button class="btn btn-danger btn-sm" data-bs-toggle="modal" data-bs-target="#addOfficerModal">
                             + Add Hospital Officer
                         </button>
-                        <a href="assign.php" class="btn btn-outline-success btn-sm">Assign Officer to Donor</a>
-                        <a href="Dashboard.php" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+                        <a href="dashboard.php" class="btn btn-outline-secondary btn-sm">Dashboard</a>
                     </div>
                 </div>
 
@@ -154,11 +161,12 @@ if ($officers_res) {
                                                 <td>
                                                     <a href="officer_donors.php?id=<?php echo $officer['staff_id']; ?>"
                                                         class="btn btn-sm btn-outline-primary">View Donors</a>
-                                                    <a href="?delete_id=<?php echo $officer['staff_id']; ?>"
-                                                        class="btn btn-sm btn-danger"
-                                                        onclick="return confirm('Delete this hospital officer? This cannot be undone.')">
-                                                        Delete
-                                                    </a>
+                                                    <form method="POST" style="display:inline;"
+                                                          onsubmit="return confirm('Delete this hospital officer? This cannot be undone.')">
+                                                        <?php bl_csrf_field(); // BL-14 ?>
+                                                        <input type="hidden" name="delete_id" value="<?php echo (int)$officer['staff_id']; ?>">
+                                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                                    </form>
                                                 </td>
                                             </tr>
                                         <?php endforeach; ?>
@@ -181,6 +189,7 @@ if ($officers_res) {
                         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                     </div>
                     <form method="POST" action="">
+                        <?php bl_csrf_field(); // BL-14 ?>
                         <div class="modal-body">
 
                             <div class="mb-3">

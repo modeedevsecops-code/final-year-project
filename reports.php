@@ -28,38 +28,30 @@ if ($export === 'donations_csv') {
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename=blood_donations_report_' . date('Ymd_His') . '.csv');
     $out = fopen('php://output', 'w');
-    fputcsv($out, ['#', 'Donation Date', 'Donor Name', 'Donor ID', 'Blood Group', 'Hospital Officer', 'Hospital / Blood Bank', 'Donation Notes', 'Status', 'Officer Comment', 'Submitted At']);
+    fputcsv($out, ['#', 'Donation Date', 'Donor Name', 'Donor ID', 'Blood Group', 'Hospital Officer', 'Hospital / Recipient', 'Units', 'Status', 'Recorded At']);
 
-    $q = "SELECT lb.log_id, lb.entry_date,
-                 s.name AS donor_name, s.reg_no AS donor_id, s.year_of_study AS blood_group,
-                 st.staff_name AS officer_name, p.title AS hospital,
-                 lb.activities, lb.status, lb.supervisor_comment, lb.created_at
-          FROM logbook_entries lb
-          LEFT JOIN students  s  ON s.student_id   = lb.student_id
-          LEFT JOIN projects  p  ON p.assigned_student = s.student_id
-          LEFT JOIN staff     st ON st.staff_id     = p.assigned_supervisor
+    $q = "SELECT d.donation_date, s.name AS donor_name, s.reg_no AS donor_id, d.blood_group,
+                 st.staff_name AS officer_name,
+                 COALESCE(br.hospital_name, r.name) AS hospital,
+                 d.units, d.status, d.created_at
+          FROM donations d
+          LEFT JOIN students s  ON s.student_id = d.donor_id
+          LEFT JOIN staff    st ON st.staff_id  = d.officer_id
+          LEFT JOIN blood_requests br ON br.request_id = d.request_id
+          LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
           WHERE 1=1";
     if ($df)
-        $q .= " AND DATE(lb.created_at) >= '$df'";
+        $q .= " AND d.donation_date >= '$df'";
     if ($dt)
-        $q .= " AND DATE(lb.created_at) <= '$dt'";
-    $q .= " ORDER BY lb.created_at DESC LIMIT 5000";
+        $q .= " AND d.donation_date <= '$dt'";
+    $q .= " ORDER BY d.created_at DESC LIMIT 5000";
 
     $res = mysqli_query($conn, $q);
     $n = 1;
     while ($r = mysqli_fetch_assoc($res)) {
         fputcsv($out, [
-            $n++,
-            $r['entry_date'],
-            $r['donor_name'],
-            $r['donor_id'],
-            $r['blood_group'],
-            $r['officer_name'],
-            $r['hospital'],
-            $r['activities'],
-            $r['status'],
-            $r['supervisor_comment'],
-            $r['created_at']
+            $n++, $r['donation_date'], $r['donor_name'], $r['donor_id'], $r['blood_group'],
+            $r['officer_name'], $r['hospital'], $r['units'], $r['status'], $r['created_at']
         ]);
     }
     fclose($out);
@@ -80,7 +72,7 @@ function safe_count($conn, $sql)
 
 $total_donors = safe_count($conn, "SELECT COUNT(*) AS cnt FROM students");
 $total_officers = safe_count($conn, "SELECT COUNT(*) AS cnt FROM staff");
-$total_donations = safe_count($conn, "SELECT COUNT(*) AS cnt FROM logbook_entries");
+$total_donations = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations");
 $total_alerts = safe_count($conn, "SELECT COUNT(*) AS cnt FROM notices");
 
 // Blood requests table may or may not exist
@@ -89,19 +81,19 @@ $total_requests = (mysqli_num_rows($chk) > 0)
     ? safe_count($conn, "SELECT COUNT(*) AS cnt FROM blood_requests")
     : 0;
 
-// Pending donations needing review
-$pending_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM logbook_entries WHERE status='pending'");
-$approved_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM logbook_entries WHERE status='approved'");
-$rejected_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM logbook_entries WHERE status='rejected'");
+// Donation status breakdown (donations.status: Completed / Pending / Cancelled)
+$approved_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations WHERE status='Completed'");
+$pending_count  = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations WHERE status='Pending'");
+$rejected_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations WHERE status='Cancelled'");
 
 // ─────────────────────────────────────────────────
-// Blood Group Distribution (from students.year_of_study = blood group)
+// Blood Group Distribution (from students.blood_group)
 // ─────────────────────────────────────────────────
 $bg_res = mysqli_query(
     $conn,
-    "SELECT year_of_study AS blood_group, COUNT(*) AS cnt
+    "SELECT blood_group, COUNT(*) AS cnt
      FROM students
-     GROUP BY year_of_study
+     GROUP BY blood_group
      ORDER BY cnt DESC"
 );
 $blood_groups = [];
@@ -117,24 +109,24 @@ if ($bg_res) {
 // ─────────────────────────────────────────────────
 $top_donors_res = mysqli_query(
     $conn,
-    "SELECT s.student_id, s.name, s.reg_no AS donor_id, s.year_of_study AS blood_group,
-            COUNT(lb.log_id) AS donation_count
+    "SELECT s.student_id, s.name, s.reg_no AS donor_id, s.blood_group,
+            COUNT(d.donation_id) AS donation_count
      FROM students s
-     LEFT JOIN logbook_entries lb ON lb.student_id = s.student_id
+     LEFT JOIN donations d ON d.donor_id = s.student_id
      GROUP BY s.student_id
      ORDER BY donation_count DESC
      LIMIT 10"
 );
 
 // ─────────────────────────────────────────────────
-// Top Hospital Officers (most donors assigned)
+// Top Hospital Officers (most donations processed)
 // ─────────────────────────────────────────────────
 $top_officers_res = mysqli_query(
     $conn,
     "SELECT st.staff_id, st.staff_name, st.position,
-            COUNT(p.project_id) AS donors_assigned
+            COUNT(d.donation_id) AS donors_assigned
      FROM staff st
-     LEFT JOIN projects p ON p.assigned_supervisor = st.staff_id
+     LEFT JOIN donations d ON d.officer_id = st.staff_id
      GROUP BY st.staff_id
      ORDER BY donors_assigned DESC
      LIMIT 10"
@@ -143,21 +135,22 @@ $top_officers_res = mysqli_query(
 // ─────────────────────────────────────────────────
 // Recent Blood Donations (filtered)
 // ─────────────────────────────────────────────────
-$recent_q = "SELECT lb.log_id, lb.entry_date,
-                    s.name AS donor_name, s.reg_no AS donor_id, s.year_of_study AS blood_group,
+$recent_q = "SELECT d.donation_date AS entry_date,
+                    s.name AS donor_name, s.reg_no AS donor_id, d.blood_group,
                     st.staff_name AS officer_name,
-                    p.title AS hospital,
-                    lb.activities, lb.status, lb.created_at
-             FROM logbook_entries lb
-             LEFT JOIN students  s  ON s.student_id       = lb.student_id
-             LEFT JOIN projects  p  ON p.assigned_student = s.student_id
-             LEFT JOIN staff     st ON st.staff_id        = p.assigned_supervisor
+                    COALESCE(br.hospital_name, r.name) AS hospital,
+                    CONCAT(d.units, ' unit(s)') AS activities, d.status, d.created_at
+             FROM donations d
+             LEFT JOIN students s  ON s.student_id = d.donor_id
+             LEFT JOIN staff    st ON st.staff_id  = d.officer_id
+             LEFT JOIN blood_requests br ON br.request_id = d.request_id
+             LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
              WHERE 1=1";
 if ($df)
-    $recent_q .= " AND DATE(lb.created_at) >= '$df'";
+    $recent_q .= " AND d.donation_date >= '$df'";
 if ($dt)
-    $recent_q .= " AND DATE(lb.created_at) <= '$dt'";
-$recent_q .= " ORDER BY lb.created_at DESC LIMIT 100";
+    $recent_q .= " AND d.donation_date <= '$dt'";
+$recent_q .= " ORDER BY d.created_at DESC LIMIT 100";
 $recent_res = mysqli_query($conn, $recent_q);
 
 // ─────────────────────────────────────────────────
@@ -195,7 +188,7 @@ $alerts_res = mysqli_query(
                         operations.</p>
                 </div>
                 <div class="d-flex gap-2">
-                    <a href="Dashboard.php" class="btn btn-outline-secondary btn-sm">Back to Dashboard</a>
+                    <a href="dashboard.php" class="btn btn-outline-secondary btn-sm">Back to Dashboard</a>
                 </div>
             </div>
 
@@ -286,15 +279,15 @@ $alerts_res = mysqli_query(
                         <div class="card-body">
                             <ul class="list-group list-group-flush">
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>✅ Approved</span>
+                                    <span>✅ Completed</span>
                                     <span class="badge bg-success fs-6"><?php echo $approved_count; ?></span>
                                 </li>
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>⏳ Pending Review</span>
+                                    <span>⏳ Pending</span>
                                     <span class="badge bg-warning text-dark fs-6"><?php echo $pending_count; ?></span>
                                 </li>
                                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                                    <span>❌ Rejected</span>
+                                    <span>❌ Cancelled</span>
                                     <span class="badge bg-danger fs-6"><?php echo $rejected_count; ?></span>
                                 </li>
                             </ul>
@@ -353,7 +346,7 @@ $alerts_res = mysqli_query(
             <div class="row g-3 mb-4">
                 <div class="col-md-6">
                     <div class="card border-0 shadow-sm h-100">
-                        <div class="card-header bg-dark text-white fw-bold">Top Hospital Officers (By Donors Assigned)
+                        <div class="card-header bg-dark text-white fw-bold">Top Hospital Officers (By Donations Processed)
                         </div>
                         <div class="card-body">
                             <?php if ($top_officers_res && mysqli_num_rows($top_officers_res) > 0): ?>
@@ -364,7 +357,7 @@ $alerts_res = mysqli_query(
                                                 <th>#</th>
                                                 <th>Officer Name</th>
                                                 <th>Role / Hospital</th>
-                                                <th>Donors</th>
+                                                <th>Donations</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -480,8 +473,7 @@ $alerts_res = mysqli_query(
                                             </td>
                                             <td>
                                                 <span class="badge bg-<?php
-                                                echo $row['status'] === 'approved' ? 'success'
-                                                    : ($row['status'] === 'rejected' ? 'danger' : 'warning text-dark');
+                                                echo $row['status'] === 'Completed' ? 'success' : ($row['status'] === 'Cancelled' ? 'danger' : 'warning text-dark');
                                                 ?>">
                                                     <?php echo ucfirst($row['status']); ?>
                                                 </span>
