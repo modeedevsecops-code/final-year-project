@@ -1,15 +1,15 @@
 <?php
-session_start();
-require_once 'config/db.php'; // adjust path if your db include has a different name/location
-
+require_once 'config/db.php';
 if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
     header("Location: login.php");
     exit();
 }
 
 $conn = $db->connection;
+$ops  = new operations();
+$banks = $ops->get_blood_banks();
 
-// --- Handle stock update ---
+// --- Handle stock update (scoped to one bank + type) ---
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     bl_csrf_check(); // BL-14
     $stock_id  = intval($_POST['stock_id']);
@@ -17,55 +17,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $threshold = intval($_POST['low_stock_threshold']);
     $admin_id  = $_SESSION['user_id'] ?? null;
 
-    // Get the blood_type for this row before updating (needed for alert logic)
-    $typeStmt = $conn->prepare("SELECT blood_type FROM blood_stock WHERE id = ?");
+    // Look up this row's bank + type before updating (needed for alert logic).
+    $typeStmt = $conn->prepare("SELECT blood_bank_id, blood_type FROM blood_stock WHERE id = ?");
     $typeStmt->bind_param("i", $stock_id);
     $typeStmt->execute();
     $typeRow = $typeStmt->get_result()->fetch_assoc();
-    $blood_type = $typeRow['blood_type'] ?? null;
     $typeStmt->close();
+    $bank_id    = $typeRow['blood_bank_id'] ?? null;
+    $blood_type = $typeRow['blood_type'] ?? null;
 
-    // Update the stock row
     $stmt = $conn->prepare("UPDATE blood_stock SET units_available = ?, low_stock_threshold = ?, updated_by = ? WHERE id = ?");
     $stmt->bind_param("iiii", $units, $threshold, $admin_id, $stock_id);
     $stmt->execute();
     $stmt->close();
 
-    if ($blood_type) {
+    if ($bank_id && $blood_type) {
         if ($units < $threshold) {
-            // Below threshold: create an active alert if one doesn't already exist
-            $checkStmt = $conn->prepare("SELECT id FROM stock_alerts WHERE blood_type = ? AND status = 'active'");
-            $checkStmt->bind_param("s", $blood_type);
+            // Raise an alert for this bank+type if one isn't already active.
+            $checkStmt = $conn->prepare("SELECT id FROM stock_alerts WHERE blood_bank_id = ? AND blood_type = ? AND status = 'active'");
+            $checkStmt->bind_param("is", $bank_id, $blood_type);
             $checkStmt->execute();
             $existing = $checkStmt->get_result()->fetch_assoc();
             $checkStmt->close();
-
             if (!$existing) {
-                $insertStmt = $conn->prepare("INSERT INTO stock_alerts (blood_type, units_at_alert, threshold, status) VALUES (?, ?, ?, 'active')");
-                $insertStmt->bind_param("sii", $blood_type, $units, $threshold);
+                $insertStmt = $conn->prepare("INSERT INTO stock_alerts (blood_bank_id, blood_type, units_at_alert, threshold, status) VALUES (?, ?, ?, ?, 'active')");
+                $insertStmt->bind_param("isii", $bank_id, $blood_type, $units, $threshold);
                 $insertStmt->execute();
                 $insertStmt->close();
             }
         } else {
-            // Back above threshold: resolve any active alert for this type
-            $resolveStmt = $conn->prepare("UPDATE stock_alerts SET status = 'resolved', resolved_at = NOW() WHERE blood_type = ? AND status = 'active'");
-            $resolveStmt->bind_param("s", $blood_type);
+            $resolveStmt = $conn->prepare("UPDATE stock_alerts SET status = 'resolved', resolved_at = NOW() WHERE blood_bank_id = ? AND blood_type = ? AND status = 'active'");
+            $resolveStmt->bind_param("is", $bank_id, $blood_type);
             $resolveStmt->execute();
             $resolveStmt->close();
         }
     }
 
-    header("Location: manage_blood_stock.php?updated=1");
+    header("Location: manage_blood_stock.php?bank=" . intval($bank_id) . "&updated=1");
     exit();
 }
 
-// --- Fetch all stock rows ---
-$result = $conn->query("SELECT * FROM blood_stock ORDER BY blood_type");
-$stock_rows = $result ? $result->fetch_all(MYSQLI_ASSOC) : [];
+// --- Which bank are we managing? ---
+$selected_bank = isset($_GET['bank']) ? intval($_GET['bank']) : (int)($banks[0]['bank_id'] ?? 0);
 
-// --- Fetch active alerts ---
-$alertResult = $conn->query("SELECT * FROM stock_alerts WHERE status = 'active' ORDER BY created_at DESC");
-$active_alerts = $alertResult ? $alertResult->fetch_all(MYSQLI_ASSOC) : [];
+// --- This bank's stock rows (ordered by blood type) ---
+$stock_rows = [];
+if ($selected_bank) {
+    $s = $conn->prepare("SELECT * FROM blood_stock WHERE blood_bank_id = ? ORDER BY blood_type");
+    $s->bind_param("i", $selected_bank);
+    $s->execute();
+    $stock_rows = $s->get_result()->fetch_all(MYSQLI_ASSOC);
+    $s->close();
+}
+
+// --- This bank's active alerts ---
+$active_alerts = [];
+if ($selected_bank) {
+    $a = $conn->prepare("SELECT * FROM stock_alerts WHERE blood_bank_id = ? AND status = 'active' ORDER BY created_at DESC");
+    $a->bind_param("i", $selected_bank);
+    $a->execute();
+    $active_alerts = $a->get_result()->fetch_all(MYSQLI_ASSOC);
+    $a->close();
+}
 
 include 'inc/header.php';
 include 'inc/navbar.php';
@@ -76,7 +89,7 @@ include 'inc/navbar.php';
     <div class="welcome-banner">
         <span class="badge-pill">BLOOD STOCK</span>
         <h1>Manage Blood Stock</h1>
-        <p>Update available units per blood type. Alerts fire automatically when stock drops below threshold.</p>
+        <p>Units are tracked per blood bank. Pick a bank, then update units and thresholds per blood type.</p>
     </div>
 
     <?php if (isset($_GET['updated'])): ?>
@@ -85,9 +98,24 @@ include 'inc/navbar.php';
         </div>
     <?php endif; ?>
 
+    <!-- Bank selector -->
+    <div class="quick-card" style="text-align:left; margin-bottom:20px;">
+        <form method="GET" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <label for="bank" style="font-weight:600;">Blood Bank:</label>
+            <select name="bank" id="bank" onchange="this.form.submit()" style="padding:8px 12px; border:1px solid #ddd; border-radius:6px; min-width:280px;">
+                <?php foreach ($banks as $b): ?>
+                    <option value="<?= (int)$b['bank_id'] ?>" <?= $selected_bank == $b['bank_id'] ? 'selected' : '' ?>>
+                        <?= htmlspecialchars($b['name']) ?> (<?= (int)$b['total_units'] ?> units)
+                    </option>
+                <?php endforeach; ?>
+            </select>
+            <noscript><button type="submit" class="btn btn-danger btn-sm">Go</button></noscript>
+        </form>
+    </div>
+
     <?php if (!empty($active_alerts)): ?>
     <div class="quick-card" style="text-align:left; border-left:4px solid #d32f2f; margin-bottom:24px;">
-        <h3 style="color:#d32f2f; margin-bottom:0.75rem;"><i class="fas fa-triangle-exclamation"></i> Active Low Stock Alerts</h3>
+        <h3 style="color:#d32f2f; margin-bottom:0.75rem;"><i class="fas fa-triangle-exclamation"></i> Active Low Stock Alerts (this bank)</h3>
         <?php foreach ($active_alerts as $alert): ?>
             <div style="padding:8px 0; border-bottom:1px solid #f0f0f0; text-align:left;">
                 <strong><?= htmlspecialchars($alert['blood_type']) ?></strong>
@@ -112,7 +140,9 @@ include 'inc/navbar.php';
                 </tr>
             </thead>
             <tbody>
-                <?php foreach ($stock_rows as $row):
+                <?php if (empty($stock_rows)): ?>
+                    <tr><td colspan="5" style="padding:14px; color:#888;">No stock rows for this bank.</td></tr>
+                <?php else: foreach ($stock_rows as $row):
                     $isLow = $row['units_available'] < $row['low_stock_threshold'];
                 ?>
                 <tr style="border-bottom:1px solid #f0f0f0; <?= $isLow ? 'background:#fff5f5;' : '' ?>">
@@ -135,7 +165,7 @@ include 'inc/navbar.php';
                         </td>
                     </form>
                 </tr>
-                <?php endforeach; ?>
+                <?php endforeach; endif; ?>
             </tbody>
         </table>
         </div>

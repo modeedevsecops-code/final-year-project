@@ -861,6 +861,19 @@ public function update_student($student_id) {
             return ['success' => false, 'message' => "Donor is not yet eligible. $wait day(s) remaining of the 56-day window."];
         }
 
+        // Which bank banks this donation? The officer's bank (staff.blood_bank_id),
+        // falling back to the first bank if the officer has none set.
+        $bank_id = null;
+        $bres = mysqli_query($db->connection, "SELECT blood_bank_id FROM staff WHERE staff_id = '$officer_id'");
+        if ($bres && ($brow = mysqli_fetch_assoc($bres))) { $bank_id = $brow['blood_bank_id'] ? intval($brow['blood_bank_id']) : null; }
+        if (!$bank_id) {
+            $fb = mysqli_query($db->connection, "SELECT bank_id FROM blood_banks ORDER BY bank_id LIMIT 1");
+            if ($fb && ($fr = mysqli_fetch_assoc($fb))) { $bank_id = intval($fr['bank_id']); }
+        }
+        if (!$bank_id) {
+            return ['success' => false, 'message' => 'No blood bank is configured to receive this donation.'];
+        }
+
         mysqli_begin_transaction($db->connection);
 
         try {
@@ -868,9 +881,9 @@ public function update_student($student_id) {
             $recipient_sql = $recipient_id ? "'$recipient_id'" : 'NULL';
             $request_sql = $request_id ? "'$request_id'" : 'NULL';
 
-            // 1. Insert donation record
-            $query = "INSERT INTO donations (donor_id, recipient_id, request_id, officer_id, blood_group, units, donation_date, status)
-                      VALUES ('$donor_id', $recipient_sql, $request_sql, '$officer_id', '$blood_group', '$units', '$today', 'Completed')";
+            // 1. Insert donation record (tagged with the receiving bank)
+            $query = "INSERT INTO donations (donor_id, recipient_id, request_id, officer_id, blood_bank_id, blood_group, units, donation_date, status)
+                      VALUES ('$donor_id', $recipient_sql, $request_sql, '$officer_id', '$bank_id', '$blood_group', '$units', '$today', 'Completed')";
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
             $donation_id = mysqli_insert_id($db->connection);
 
@@ -878,13 +891,13 @@ public function update_student($student_id) {
             $query = "UPDATE students SET last_donation_date = '$today' WHERE student_id = '$donor_id'";
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
 
-            // 3. Add donated units to stock
-            // NOTE: blood_stock keys on blood_type (see db/schema.sql). This used to say
-            // blood_group, which is the column name manage_blood_stock.php never used.
-            $query = "UPDATE blood_stock SET units_available = units_available + '$units' WHERE blood_type = '$blood_group'";
+            // 3. Add donated units to THIS BANK's stock (create the row if missing).
+            $query = "INSERT INTO blood_stock (blood_bank_id, blood_type, units_available)
+                      VALUES ('$bank_id', '$blood_group', '$units')
+                      ON DUPLICATE KEY UPDATE units_available = units_available + '$units'";
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
 
-            // 4. If tied to a request, update its status and draw the units back down from stock
+            // 4. If tied to a request, update its status and draw the units back down from this bank.
             if ($request_id) {
                 $req_result = mysqli_query($db->connection, "SELECT units_needed FROM blood_requests WHERE request_id = '$request_id'");
                 $req_row = $req_result ? mysqli_fetch_assoc($req_result) : null;
@@ -895,19 +908,17 @@ public function update_student($student_id) {
                     if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
                 }
 
-                $query = "UPDATE blood_stock SET units_available = GREATEST(units_available - '$units', 0) WHERE blood_type = '$blood_group'";
+                $query = "UPDATE blood_stock SET units_available = GREATEST(units_available - '$units', 0)
+                          WHERE blood_bank_id = '$bank_id' AND blood_type = '$blood_group'";
                 if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
             }
 
-            // 5. Resolve any related stock alert now that stock improved (non-critical, don't throw)
-            // stock_alerts joins blood_stock on blood_type and uses 'active'/'resolved'
-            // (manage_blood_stock.php's vocabulary). This used to join on a stock_id
-            // column that does not exist and look for status 'unresolved', so it
-            // silently matched nothing and alerts were never cleared by a donation.
+            // 5. Resolve this bank's stock alert for the type if it's back above threshold.
             $query = "UPDATE stock_alerts sa
-                      JOIN blood_stock bs ON bs.blood_type = sa.blood_type
+                      JOIN blood_stock bs ON bs.blood_bank_id = sa.blood_bank_id AND bs.blood_type = sa.blood_type
                       SET sa.status = 'resolved', sa.resolved_at = NOW()
-                      WHERE bs.blood_type = '$blood_group' AND bs.units_available >= bs.low_stock_threshold AND sa.status = 'active'";
+                      WHERE sa.blood_bank_id = '$bank_id' AND sa.blood_type = '$blood_group'
+                        AND bs.units_available >= bs.low_stock_threshold AND sa.status = 'active'";
             mysqli_query($db->connection, $query);
 
             mysqli_commit($db->connection);
@@ -935,6 +946,83 @@ public function update_student($student_id) {
         ";
         $result = mysqli_query($db->connection, $query);
         return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+    }
+
+    // ===================== BLOOD BANKS (facilities) =====================
+
+    // All banks, optionally with aggregate stock, for admin lists / dropdowns.
+    public function get_blood_banks() {
+        global $db;
+        $res = mysqli_query($db->connection,
+            "SELECT bb.*,
+                    COALESCE(SUM(bs.units_available),0) AS total_units,
+                    COUNT(DISTINCT st.staff_id) AS officer_count
+             FROM blood_banks bb
+             LEFT JOIN blood_stock bs ON bs.blood_bank_id = bb.bank_id
+             LEFT JOIN staff st ON st.blood_bank_id = bb.bank_id
+             GROUP BY bb.bank_id
+             ORDER BY bb.name ASC");
+        return $res ? mysqli_fetch_all($res, MYSQLI_ASSOC) : [];
+    }
+
+    public function get_bank_by_id($id) {
+        global $db;
+        $id = intval($id);
+        $res = mysqli_query($db->connection, "SELECT * FROM blood_banks WHERE bank_id = $id LIMIT 1");
+        return $res ? mysqli_fetch_assoc($res) : null;
+    }
+
+    // Add a bank (geocodes the address so it appears on the locator).
+    public function add_blood_bank() {
+        global $db;
+        if (!isset($_POST['btn_add_bank'])) return;
+        bl_csrf_check();
+        $name    = $db->check(trim($_POST['name'] ?? ''));
+        $address = $db->check(trim($_POST['address'] ?? ''));
+        $phone   = $db->check(trim($_POST['contact_phone'] ?? ''));
+        $addr_raw = trim($_POST['address'] ?? '');
+        if ($name === '' || $addr_raw === '') {
+            $this->set_message('<div class="alert alert-danger">Bank name and address are required.</div>');
+            return;
+        }
+        list($lat, $lng) = bl_geocode($addr_raw);
+        $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'NULL';
+        $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'NULL';
+        $q = "INSERT INTO blood_banks (name, address, contact_phone, latitude, longitude)
+              VALUES ('$name', '$address', '$phone', $lat_sql, $lng_sql)";
+        if (mysqli_query($db->connection, $q)) {
+            $new_id = mysqli_insert_id($db->connection);
+            // Give the new bank an empty stock row per blood type so it's manageable immediately.
+            foreach (['A+','A-','B+','B-','AB+','AB-','O+','O-'] as $bg) {
+                mysqli_query($db->connection, "INSERT IGNORE INTO blood_stock (blood_bank_id, blood_type, units_available) VALUES ($new_id, '$bg', 0)");
+            }
+            $this->set_message('<div class="alert alert-success text-center">Blood bank added.</div>');
+            echo '<script>setTimeout(() => window.location.href = "manage_blood_banks.php", 1200);</script>';
+        } else {
+            $this->set_message('<div class="alert alert-danger">Failed to add bank: ' . mysqli_error($db->connection) . '</div>');
+        }
+    }
+
+    public function update_blood_bank($id) {
+        global $db;
+        if (!isset($_POST['btn_update_bank'])) return;
+        bl_csrf_check();
+        $id      = intval($id);
+        $name    = $db->check(trim($_POST['name'] ?? ''));
+        $address = $db->check(trim($_POST['address'] ?? ''));
+        $phone   = $db->check(trim($_POST['contact_phone'] ?? ''));
+        $addr_raw = trim($_POST['address'] ?? '');
+        list($lat, $lng) = bl_geocode($addr_raw);
+        $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'latitude';
+        $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'longitude';
+        $q = "UPDATE blood_banks SET name='$name', address='$address', contact_phone='$phone',
+                 latitude=$lat_sql, longitude=$lng_sql WHERE bank_id=$id";
+        if (mysqli_query($db->connection, $q)) {
+            $this->set_message('<div class="alert alert-success text-center">Blood bank updated.</div>');
+            echo '<script>setTimeout(() => window.location.href = "manage_blood_banks.php", 1200);</script>';
+        } else {
+            $this->set_message('<div class="alert alert-danger">Failed to update bank.</div>');
+        }
     }
 
     // Donation history for a recipient: "You received X from Y"

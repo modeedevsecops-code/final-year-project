@@ -1,25 +1,13 @@
 -- ============================================================================
---  BloodLink — Smart Blood Bank Management System
---  Canonical schema (v2). Replaces the stale phpMyAdmin dump in donor_app.sql.
+--  BloodLink — Enhanced Blood Bank Management System
+--  Canonical schema (v3). Aligned with the project brief's ERD (Figure 5.3):
+--  the design centres on blood_banks (registered facilities), with blood_stock
+--  and stock_alerts scoped PER BANK, and staff (hospital officers) belonging to
+--  a bank. The Blood Bank Locator ranks these banks by distance and routes to
+--  them (Nominatim + OSRM).
 --
---  What changed vs. donor_app.sql, and why:
---    * Adds the 4 tables the code queries but the dump never created:
---      recipients, donations, blood_stock, stock_alerts.
---    * students.blood_group is now a real column. The app previously stored a
---      donor's blood group in year_of_study (register_donor.php), read it from
---      year_of_study (reports.php), read it from status (geo_map.php), and
---      matched on blood_group (functions.php) — which did not exist. All four
---      now agree on blood_group. year_of_study is kept nullable for one release
---      so old rows survive the migration, then it can be dropped.
---    * Settles the blood_stock / stock_alerts schema conflict in favour of the
---      admin page's shape (id / blood_type / status='active'), which is the
---      richer of the two. process_donation() has been updated to match.
---    * Adds latitude/longitude to students, recipients and blood_requests so
---      the geo-location feature has somewhere to write.
---    * notices.supervisor_id is now NULL-able, so system-generated emergency
---      alerts (request_blood.php) actually persist instead of failing silently.
---    * Drops the exam-invigilation leftovers (timetable, allocation) inherited
---      from the SIWES codebase this project was adapted from.
+--  Tables: login, blood_banks, staff, students (donors), recipients,
+--          blood_requests, notices, donations, blood_stock, stock_alerts.
 --
 --  Import:  mysql -u root donor_app < db/schema.sql
 -- ============================================================================
@@ -38,11 +26,11 @@ DROP TABLE IF EXISTS `notices`;
 DROP TABLE IF EXISTS `blood_requests`;
 DROP TABLE IF EXISTS `students`;
 DROP TABLE IF EXISTS `staff`;
+DROP TABLE IF EXISTS `blood_banks`;
 DROP TABLE IF EXISTS `login`;
 
 -- ---------------------------------------------------------------- login ----
--- Administrator accounts. PASSWORD is plaintext today; Phase 2 replaces this
--- with password_hash() and widens the column to 255.
+-- Administrator accounts.
 CREATE TABLE `login` (
   `user_id`   INT(11) NOT NULL AUTO_INCREMENT,
   `USERNAME`  VARCHAR(50)  NOT NULL,
@@ -52,23 +40,45 @@ CREATE TABLE `login` (
   UNIQUE KEY `uq_login_username` (`USERNAME`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- ----------------------------------------------------------- blood_banks ----
+-- Registered blood-bank facilities. Central to the ERD and the locator: each
+-- has a geocoded location and contact so donors/recipients can find and route
+-- to the nearest one. NEW in v3 (was missing though the brief specified it).
+CREATE TABLE `blood_banks` (
+  `bank_id`       INT(11) NOT NULL AUTO_INCREMENT,
+  `name`          VARCHAR(150) NOT NULL,
+  `address`       VARCHAR(255) NOT NULL,
+  `latitude`      DECIMAL(10,7) DEFAULT NULL,
+  `longitude`     DECIMAL(10,7) DEFAULT NULL,
+  `contact_phone` VARCHAR(20)  DEFAULT NULL,
+  `created_at`    TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`bank_id`),
+  UNIQUE KEY `uq_bank_name` (`name`),
+  KEY `idx_bank_geo` (`latitude`,`longitude`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Registered blood-bank facilities';
+
 -- ---------------------------------------------------------------- staff ----
--- Hospital officers. (Table name retained from the SIWES original.)
+-- Hospital officers. Each belongs to a blood bank (brief ERD: staff.hospital_id).
 CREATE TABLE `staff` (
   `staff_id`        INT(11) NOT NULL AUTO_INCREMENT,
   `staff_name`      VARCHAR(100) NOT NULL,
   `phone`           VARCHAR(20)  NOT NULL,
   `email`           VARCHAR(100) NOT NULL,
   `position`        VARCHAR(150) NOT NULL,
+  `blood_bank_id`   INT(11)      DEFAULT NULL COMMENT 'FK -> blood_banks.bank_id',
   `password`        VARCHAR(255) NOT NULL,
   `date_registered` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`staff_id`),
-  UNIQUE KEY `uq_staff_email` (`email`)
+  UNIQUE KEY `uq_staff_email` (`email`),
+  KEY `fk_staff_bank` (`blood_bank_id`),
+  CONSTRAINT `fk_staff_bank` FOREIGN KEY (`blood_bank_id`)
+    REFERENCES `blood_banks` (`bank_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Hospital officers / blood bank staff';
 
 -- ------------------------------------------------------------- students ----
--- Blood donors. (Table name retained from the SIWES original.)
+-- Blood donors. (Table name retained from the original codebase.)
 CREATE TABLE `students` (
   `student_id`          INT(11) NOT NULL AUTO_INCREMENT,
   `name`                VARCHAR(100) NOT NULL,
@@ -80,8 +90,6 @@ CREATE TABLE `students` (
   `address`             VARCHAR(255) DEFAULT NULL,
   `latitude`            DECIMAL(10,7) DEFAULT NULL,
   `longitude`           DECIMAL(10,7) DEFAULT NULL,
-  `year_of_study`       VARCHAR(50)  DEFAULT NULL COMMENT 'LEGACY: held the blood group before v2. Drop after migration.',
-  `status`              VARCHAR(50)  DEFAULT NULL COMMENT 'LEGACY: geo_map.php read the blood group from here.',
   `password`            VARCHAR(255) NOT NULL,
   `created_at`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -94,9 +102,6 @@ CREATE TABLE `students` (
   COMMENT='Blood donors';
 
 -- ----------------------------------------------------------- recipients ----
--- NEW in v2. Queried by register_recipient.php, user_login(), recipient_form.php
--- and manage_recipients.php, but never created by the old dump.
--- Standardised on recipient_id (manage_recipients.php ordered by `id`).
 CREATE TABLE `recipients` (
   `recipient_id` INT(11) NOT NULL AUTO_INCREMENT,
   `name`         VARCHAR(100) NOT NULL,
@@ -113,11 +118,7 @@ CREATE TABLE `recipients` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Blood recipients / patients';
 
-
 -- ------------------------------------------------------- blood_requests ----
--- recipient_id, latitude and longitude are new in v2. request_blood.php used to
--- add recipient_id at runtime with MariaDB-only "ADD COLUMN IF NOT EXISTS",
--- which is a syntax error on MySQL; declaring it here removes that dependency.
 CREATE TABLE `blood_requests` (
   `request_id`    INT(11) NOT NULL AUTO_INCREMENT,
   `recipient_id`  INT(11) DEFAULT NULL,
@@ -141,11 +142,8 @@ CREATE TABLE `blood_requests` (
     REFERENCES `recipients` (`recipient_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-
 -- ------------------------------------------------------------- notices ----
--- Emergency alerts. supervisor_id is NULL-able in v2: request_blood.php posts
--- system-generated alerts with no officer attached, and the old NOT NULL made
--- that insert fail silently while showing the user a success message.
+-- Emergency alerts. supervisor_id NULL = system-generated.
 CREATE TABLE `notices` (
   `notice_id`     INT(11) NOT NULL AUTO_INCREMENT,
   `supervisor_id` INT(11) DEFAULT NULL COMMENT 'NULL = system-generated alert',
@@ -158,19 +156,14 @@ CREATE TABLE `notices` (
     REFERENCES `staff` (`staff_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
-
-
-
-
 -- ----------------------------------------------------------- donations ----
--- NEW in v2. The real donation ledger, written transactionally by
--- process_donation(). Never created by the old dump.
 CREATE TABLE `donations` (
   `donation_id`   INT(11) NOT NULL AUTO_INCREMENT,
   `donor_id`      INT(11) NOT NULL COMMENT 'FK -> students.student_id',
   `recipient_id`  INT(11) DEFAULT NULL,
   `request_id`    INT(11) DEFAULT NULL,
   `officer_id`    INT(11) NOT NULL COMMENT 'FK -> staff.staff_id, who confirmed it',
+  `blood_bank_id` INT(11) DEFAULT NULL COMMENT 'FK -> blood_banks.bank_id, where it was banked',
   `blood_group`   VARCHAR(5) NOT NULL,
   `units`         INT(11) NOT NULL DEFAULT 1,
   `donation_date` DATE NOT NULL,
@@ -181,35 +174,41 @@ CREATE TABLE `donations` (
   KEY `idx_donations_recipient` (`recipient_id`),
   KEY `idx_donations_date` (`donation_date`),
   KEY `fk_donation_request` (`request_id`),
+  KEY `fk_donation_bank` (`blood_bank_id`),
   CONSTRAINT `fk_donation_donor` FOREIGN KEY (`donor_id`)
     REFERENCES `students` (`student_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_donation_recipient` FOREIGN KEY (`recipient_id`)
     REFERENCES `recipients` (`recipient_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_donation_request` FOREIGN KEY (`request_id`)
-    REFERENCES `blood_requests` (`request_id`) ON DELETE SET NULL
+    REFERENCES `blood_requests` (`request_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_donation_bank` FOREIGN KEY (`blood_bank_id`)
+    REFERENCES `blood_banks` (`bank_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Completed blood donations — the real ledger';
 
 -- --------------------------------------------------------- blood_stock ----
--- NEW in v2. Schema conflict resolved in favour of manage_blood_stock.php
--- (id / blood_type). process_donation() has been updated to match.
+-- Per-bank inventory (brief ERD: blood_stock.blood_bank_id). One row per
+-- (bank, blood type).
 CREATE TABLE `blood_stock` (
   `id`                  INT(11) NOT NULL AUTO_INCREMENT,
+  `blood_bank_id`       INT(11) NOT NULL COMMENT 'FK -> blood_banks.bank_id',
   `blood_type`          VARCHAR(5) NOT NULL,
   `units_available`     INT(11) NOT NULL DEFAULT 0,
   `low_stock_threshold` INT(11) NOT NULL DEFAULT 5,
   `updated_by`          INT(11) DEFAULT NULL COMMENT 'FK -> login.user_id',
   `last_updated`        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_stock_blood_type` (`blood_type`)
+  UNIQUE KEY `uq_stock_bank_type` (`blood_bank_id`,`blood_type`),
+  CONSTRAINT `fk_stock_bank` FOREIGN KEY (`blood_bank_id`)
+    REFERENCES `blood_banks` (`bank_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Units in inventory per blood type';
+  COMMENT='Units in inventory per bank per blood type';
 
 -- -------------------------------------------------------- stock_alerts ----
--- NEW in v2. Uses status='active'/'resolved' (the admin page's vocabulary);
--- process_donation() previously wrote 'unresolved' and has been updated.
+-- Low-stock alerts per bank per type.
 CREATE TABLE `stock_alerts` (
   `id`             INT(11) NOT NULL AUTO_INCREMENT,
+  `blood_bank_id`  INT(11) NOT NULL COMMENT 'FK -> blood_banks.bank_id',
   `blood_type`     VARCHAR(5) NOT NULL,
   `units_at_alert` INT(11) NOT NULL,
   `threshold`      INT(11) NOT NULL,
@@ -217,7 +216,10 @@ CREATE TABLE `stock_alerts` (
   `created_at`     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `resolved_at`    TIMESTAMP NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_alerts_status` (`status`,`blood_type`)
+  KEY `idx_alerts_status` (`status`,`blood_bank_id`,`blood_type`),
+  KEY `fk_alert_bank` (`blood_bank_id`),
+  CONSTRAINT `fk_alert_bank` FOREIGN KEY (`blood_bank_id`)
+    REFERENCES `blood_banks` (`bank_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Low-stock alerts raised against blood_stock';
 

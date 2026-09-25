@@ -119,6 +119,7 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='manage_donors.php'?'active':''; ?>" href="manage_donors.php"><i class="fas fa-tint"></i> Manage Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_officers.php'?'active':''; ?>" href="manage_officers.php"><i class="fas fa-briefcase"></i> Hospital Officers</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_recipients.php'?'active':''; ?>" href="manage_recipients.php"><i class="fas fa-user-injured"></i> Recipients</a></li>
+            <li><a class="nav-link <?php echo $current_page=='manage_blood_banks.php'?'active':''; ?>" href="manage_blood_banks.php"><i class="fas fa-hospital"></i> Blood Banks</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_blood_stock.php'?'active':''; ?>" href="manage_blood_stock.php"><i class="fas fa-flask"></i> Blood Stock</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>

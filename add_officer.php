@@ -10,6 +10,8 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 
 global $db;
 $conn = $db->connection;
+$ops  = new operations();
+$banks = $ops->get_blood_banks();
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
@@ -17,15 +19,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
     $email      = mysqli_real_escape_string($conn, trim($_POST['email']));
     $phone      = mysqli_real_escape_string($conn, trim($_POST['phone']));
-    $position   = mysqli_real_escape_string($conn, trim($_POST['position']));
-    $hospital   = mysqli_real_escape_string($conn, trim($_POST['hospital']));
+    $position   = mysqli_real_escape_string($conn, trim($_POST['position'] ?: 'Blood Bank Officer'));
+    $bank_id    = intval($_POST['blood_bank_id'] ?? 0);
+    $bank_sql   = $bank_id ? "'$bank_id'" : 'NULL';
     // Hash the officer's password at creation (BL-12).
     $password   = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
 
     if ($staff_name && $email && $phone && !empty(trim($_POST['password']))) {
-        $full_position = $position . ($hospital ? ' – ' . $hospital : '');
-        $q = "INSERT INTO staff (staff_name, phone, email, position, password)
-              VALUES ('$staff_name', '$phone', '$email', '$full_position', '$password')";
+        $q = "INSERT INTO staff (staff_name, phone, email, position, blood_bank_id, password)
+              VALUES ('$staff_name', '$phone', '$email', '$position', $bank_sql, '$password')";
         if (mysqli_query($conn, $q)) {
             $msg = '<div class="alert alert-success text-center">Hospital Officer added successfully! <a href="manage_officers.php">View all officers</a></div>';
         } else {
@@ -85,9 +87,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Hospital / Blood Bank Name</label>
-                        <input type="text" class="form-control" name="hospital"
-                               placeholder="e.g. Aminu Kano Teaching Hospital">
+                        <label class="form-label fw-bold">Blood Bank <span class="text-danger">*</span></label>
+                        <select class="form-control form-select" name="blood_bank_id" required>
+                            <option value="">-- Assign to a blood bank --</option>
+                            <?php foreach ($banks as $b): ?>
+                                <option value="<?= (int)$b['bank_id'] ?>"><?= htmlspecialchars($b['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Donations this officer confirms are banked here. Manage banks under <a href="manage_blood_banks.php">Blood Banks</a>.</small>
                     </div>
 
                     <div class="mb-4">

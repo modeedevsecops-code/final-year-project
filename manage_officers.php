@@ -21,17 +21,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
     $email = mysqli_real_escape_string($conn, trim($_POST['email']));
     $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
-    $position = mysqli_real_escape_string($conn, trim($_POST['position']));
-    $hospital = mysqli_real_escape_string($conn, trim($_POST['hospital']));
+    $position = mysqli_real_escape_string($conn, trim($_POST['position'] ?: 'Blood Bank Officer'));
+    $bank_id  = intval($_POST['blood_bank_id'] ?? 0);
+    $bank_sql = $bank_id ? "'$bank_id'" : 'NULL';
     // Hash the officer password at creation (BL-12).
     $plain_password = trim($_POST['password']);
     $password = password_hash($plain_password, PASSWORD_DEFAULT);
 
     if ($staff_name && $email && $phone && $plain_password !== '') {
-        // Store hospital in position field (repurposed) or add to staff_name
-        $full_position = $position . ($hospital ? ' – ' . $hospital : '');
-        $q = "INSERT INTO staff (staff_name, phone, email, position, password)
-              VALUES ('$staff_name', '$phone', '$email', '$full_position', '$password')";
+        $q = "INSERT INTO staff (staff_name, phone, email, position, blood_bank_id, password)
+              VALUES ('$staff_name', '$phone', '$email', '$position', $bank_sql, '$password')";
         if (mysqli_query($conn, $q)) {
             $form_msg = '<div class="alert alert-success">Hospital Officer added successfully!</div>';
         } else {
@@ -63,12 +62,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
 $officers_res = mysqli_query(
     $conn,
     "SELECT s.staff_id, s.staff_name, s.email, s.phone, s.position, s.date_registered,
-            COUNT(p.project_id) AS donor_count
+            bb.name AS bank_name,
+            COUNT(d.donation_id) AS donation_count
      FROM staff s
-     LEFT JOIN projects p ON s.staff_id = p.assigned_supervisor
+     LEFT JOIN blood_banks bb ON bb.bank_id = s.blood_bank_id
+     LEFT JOIN donations d ON d.officer_id = s.staff_id
      GROUP BY s.staff_id
      ORDER BY s.staff_name ASC"
 );
+$ops_banks = (new operations())->get_blood_banks();
 $officers = [];
 if ($officers_res) {
     while ($row = mysqli_fetch_assoc($officers_res)) {
@@ -130,9 +132,10 @@ if ($officers_res) {
                                             <th>Officer Name</th>
                                             <th>Email</th>
                                             <th>Phone</th>
-                                            <th>Role / Hospital</th>
+                                            <th>Role</th>
+                                            <th>Blood Bank</th>
                                             <th>Registered</th>
-                                            <th>Donors Assigned</th>
+                                            <th>Donations</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -150,17 +153,18 @@ if ($officers_res) {
                                                     </small>
                                                 </td>
                                                 <td>
+                                                    <small><?php echo htmlspecialchars($officer['bank_name'] ?: '—'); ?></small>
+                                                </td>
+                                                <td>
                                                     <small><?php echo date('d M Y', strtotime($officer['date_registered'])); ?></small>
                                                 </td>
                                                 <td>
                                                     <span
-                                                        class="badge bg-<?php echo $officer['donor_count'] > 0 ? 'success' : 'secondary'; ?>">
-                                                        <?php echo $officer['donor_count']; ?> Donor(s)
+                                                        class="badge bg-<?php echo $officer['donation_count'] > 0 ? 'success' : 'secondary'; ?>">
+                                                        <?php echo $officer['donation_count']; ?>
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <a href="officer_donors.php?id=<?php echo $officer['staff_id']; ?>"
-                                                        class="btn btn-sm btn-outline-primary">View Donors</a>
                                                     <form method="POST" style="display:inline;"
                                                           onsubmit="return confirm('Delete this hospital officer? This cannot be undone.')">
                                                         <?php bl_csrf_field(); // BL-14 ?>
@@ -218,9 +222,13 @@ if ($officers_res) {
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label fw-bold">Hospital / Blood Bank Name</label>
-                                <input type="text" name="hospital" class="form-control"
-                                    placeholder="e.g. Aminu Kano Teaching Hospital">
+                                <label class="form-label fw-bold">Blood Bank <span class="text-danger">*</span></label>
+                                <select name="blood_bank_id" class="form-control form-select" required>
+                                    <option value="">-- Assign to a blood bank --</option>
+                                    <?php foreach ($ops_banks as $b): ?>
+                                        <option value="<?= (int)$b['bank_id'] ?>"><?= htmlspecialchars($b['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
 
                             <div class="mb-3">
