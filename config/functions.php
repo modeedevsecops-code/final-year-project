@@ -46,31 +46,29 @@ class operations extends dbconfig{
 // Inserting Record into the Database
 
 // In your operations class
-public function add_student() {
+public function add_donor() {
     global $db;
 
-    if (isset($_POST['btn_add_student'])) {
+    if (isset($_POST['btn_add_donor'])) {
         $name = $db->check($_POST['name']);
         $email = $db->check($_POST['email']);
         $phone = $db->check($_POST['phone']);
-        $department = $db->check($_POST['reg_no']);
+        $department = $db->check($_POST['donor_code']);
         $password = $db->check($_POST['password']);
-        // The "year_of_study" select actually carries the blood group; the
-        // address field is named donor_address on the admin form.
-        $year_of_study = $db->check($_POST['year_of_study'] ?? ($_POST['blood_group'] ?? ''));
+        $blood_group = $db->check($_POST['blood_group'] ?? '');
         $address = $db->check($_POST['donor_address'] ?? ($_POST['address'] ?? ''));
 
         // Validate required fields
-        if (!empty($name) && !empty($email) && !empty($phone) && !empty($department) && !empty($year_of_study) && !empty($address)) {
-            if ($this->insert_student($name, $email, $phone, $department, $year_of_study, $password, $address)) {
-                $this->set_message('<div class="alert alert-success text-center"> Student Added Successfully</div>');
+        if (!empty($name) && !empty($email) && !empty($phone) && !empty($department) && !empty($blood_group) && !empty($address)) {
+            if ($this->insert_donor($name, $email, $phone, $department, $blood_group, $password, $address)) {
+                $this->set_message('<div class="alert alert-success text-center"> Donor Added Successfully</div>');
                 ?>
                 <script>
                     setTimeout(() => window.location.href = "", 2000);
                 </script>
                 <?php
             } else {
-                $this->set_message('<div class="alert alert-danger"> Failed to Add Student! </div>');
+                $this->set_message('<div class="alert alert-danger"> Failed to Add Donor! </div>');
             }
         } else {
             $this->set_message('<div class="alert alert-danger"> Please fill in all fields! </div>');
@@ -78,13 +76,9 @@ public function add_student() {
     }
 }
 
-// Inserting Record into the Database.
-// $blood_group is passed in the old $year_of_study slot (the admin form's
-// select is named year_of_study but holds the blood group). It is written to
-// the real blood_group column now, so admin-added donors are visible to the
-// matching engine (BL-01). Geocoding uses Nominatim (Phase 3). Password is
-// hashed at creation (BL-12).
-function insert_student($name, $email, $phone, $department, $blood_group, $password, $address) {
+// Inserts a donor. Writes the blood group to blood_group, geocodes the address
+// via Nominatim, and hashes the password at creation.
+function insert_donor($name, $email, $phone, $department, $blood_group, $password, $address) {
     global $db;
 
     list($latitude, $longitude) = bl_geocode($address);
@@ -93,7 +87,7 @@ function insert_student($name, $email, $phone, $department, $blood_group, $passw
 
     $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
-    $query = "INSERT INTO students (name, email, phone, reg_no, blood_group, password, address, latitude, longitude)
+    $query = "INSERT INTO donors (name, email, phone, donor_code, blood_group, password, address, latitude, longitude)
               VALUES ('$name', '$email', '$phone', '$department', '$blood_group', '$password_hash', '$address', $lat_val, $lng_val)";
     $result = mysqli_query($db->connection, $query);
 
@@ -191,48 +185,6 @@ public function update_recipient($id) {
     }
 }
 
-public function add_supervisor() {
-    global $db;
-
-    if (isset($_POST['btn_add_supervisor'])) {
-        // Retrieve and sanitize input data
-        $staff_name = $db->check($_POST['staff_name']);
-        $phone      = $db->check($_POST['phone']);
-        $email      = $db->check($_POST['email']);
-        $position   = $db->check($_POST['position'] ?? '');
-        $hospital   = $db->check($_POST['hospital'] ?? '');
-        $password   = $db->check($_POST['password'] ?? '');
-
-        // Combine position + hospital into one field
-        $full_position = $position . ($hospital ? ' – ' . $hospital : '');
-
-        // Insert record into the database
-        if ($this->insert_supervisor_record($staff_name, $phone, $email, $full_position, $password)) {
-            $this->set_message('<div class="alert alert-success text-center"> Hospital Officer Added Successfully</div>');
-            ?>
-            <script>
-                setTimeout(() => window.location.href = "", 2000);
-            </script>
-            <?php
-        } else {
-            $this->set_message('<div class="alert alert-danger"> Failed to Add Hospital Officer! </div>');
-        }
-    }
-}
-
-// Function to insert the hospital officer record into the database
-private function insert_supervisor_record($staff_name, $phone, $email, $position, $password = '') {
-    global $db;
-
-    $query = "INSERT INTO staff (staff_name, phone, email, position, password)
-              VALUES ('$staff_name', '$phone', '$email', '$position', '$password')";
-    $result = mysqli_query($db->connection, $query);
-
-    return $result;
-}
-
-
-
 // Verify a plaintext password against a stored value, transparently upgrading
 // legacy plaintext rows to a bcrypt hash on the first successful login.
 // Returns true if the password matches (BL-12 / BL-13).
@@ -263,25 +215,25 @@ public function user_login() {
 
     $role = $_POST['role'] ?? '';
 
-    if ($role == 'student') {
-      // Donor login by reg_no + password (prepared statement — BL-13)
-      $reg_no   = trim($_POST['reg_no'] ?? '');
-      $password = $_POST['student_password'] ?? '';
+    if ($role == 'donor') {
+      // Donor login by donor_code + password (prepared statement — BL-13)
+      $donor_code   = trim($_POST['donor_code'] ?? '');
+      $password = $_POST['donor_password'] ?? '';
 
       $user = null;
-      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM students WHERE reg_no = ? LIMIT 1")) {
-        mysqli_stmt_bind_param($stmt, "s", $reg_no);
+      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM donors WHERE donor_code = ? LIMIT 1")) {
+        mysqli_stmt_bind_param($stmt, "s", $donor_code);
         mysqli_stmt_execute($stmt);
         $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
         mysqli_stmt_close($stmt);
       }
 
-      if ($user && $this->verify_password($password, $user['password'], 'students', 'student_id', $user['student_id'])) {
+      if ($user && $this->verify_password($password, $user['password'], 'donors', 'donor_id', $user['donor_id'])) {
         $_SESSION['Active'] = 'Active';
-        $_SESSION['role'] = 'student';
-        $_SESSION['user_id'] = $user['student_id'];
+        $_SESSION['role'] = 'donor';
+        $_SESSION['user_id'] = $user['donor_id'];
         $_SESSION['name'] = $user['name'];
-        $_SESSION['reg_no'] = $user['reg_no'];
+        $_SESSION['donor_code'] = $user['donor_code'];
 
         $this->set_message('<div class="alert alert-success text-center">Login Successful!</div>');
 ?>
@@ -336,25 +288,25 @@ public function user_login() {
             }
         }
 
-    elseif ($role == 'supervisor') {
+    elseif ($role == 'officer') {
       // Officer login by email + password (prepared statement — BL-13)
       $email    = trim($_POST['email'] ?? '');
       $password = $_POST['password'] ?? '';
 
       $user = null;
-      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM staff WHERE email = ? LIMIT 1")) {
+      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM hospital_workers WHERE email = ? LIMIT 1")) {
         mysqli_stmt_bind_param($stmt, "s", $email);
         mysqli_stmt_execute($stmt);
         $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
         mysqli_stmt_close($stmt);
       }
 
-      if ($user && $this->verify_password($password, $user['password'], 'staff', 'staff_id', $user['staff_id'])) {
+      if ($user && $this->verify_password($password, $user['password'], 'hospital_workers', 'worker_id', $user['worker_id'])) {
         $_SESSION['Active'] = 'Active';
-        $_SESSION['role'] = 'supervisor';
-        $_SESSION['user_id'] = $user['staff_id'];
-        $_SESSION['supervisor_id'] = $user['staff_id'];
-        $_SESSION['name'] = $user['staff_name'];
+        $_SESSION['role'] = 'officer';
+        $_SESSION['user_id'] = $user['worker_id'];
+        $_SESSION['officer_id'] = $user['worker_id'];
+        $_SESSION['name'] = $user['name'];
         $_SESSION['email'] = $user['email'];
 
         $this->set_message('<div class="alert alert-success text-center">Login Successful!</div>');
@@ -383,7 +335,7 @@ public function user_login() {
     public function fetch_staff_record(){
 
         global $db;
-        $query = "SELECT * FROM staff";
+        $query = "SELECT * FROM hospital_workers";
         $result = mysqli_query($db->connection, $query);
         return $result;
     }
@@ -392,20 +344,20 @@ public function user_login() {
     public function get_record($id){
 
         global $db;
-        $query = "SELECT * FROM staff WHERE staff_id='$id' ";
+        $query = "SELECT * FROM hospital_workers WHERE worker_id='$id' ";
         $result = mysqli_query($db->connection, $query);
         return $result;
     }
 
 
-      //Add Multiple Staff
+      // (removed) bulk upload
 
 
      //Inserting Record into the Database
 
 
 
-       //Add Multiple Staff
+       // (removed) bulk upload
 
 
      //Inserting Record into the Database
@@ -523,17 +475,17 @@ public function user_login() {
         }
     }
 
-public function delete_student() {
+public function delete_donor() {
     global $db;
 
-    if (isset($_POST['btn_delete_student'])) {
-        $student_id = $_POST['student_id'];
+    if (isset($_POST['btn_delete_donor'])) {
+        $donor_id = $_POST['donor_id'];
 
-        $query = "DELETE FROM students WHERE student_id='$student_id'";
+        $query = "DELETE FROM donors WHERE donor_id='$donor_id'";
         if (mysqli_query($db->connection, $query)) {
-            $this->set_message('<div class="alert alert-success">Student deleted successfully.</div>');
+            $this->set_message('<div class="alert alert-success">Donor deleted successfully.</div>');
         } else {
-            $this->set_message('<div class="alert alert-danger">Failed to delete student.</div>');
+            $this->set_message('<div class="alert alert-danger">Failed to delete donor.</div>');
         }
     }
 }
@@ -627,82 +579,82 @@ public function delete_student() {
 
     }
 
-    // Fetch student details by ID
-public function get_student_by_id($student_id) {
+    // Fetch donor details by ID
+public function get_donor_by_id($donor_id) {
     global $db;
-    $query = "SELECT * FROM students WHERE student_id = '$student_id'";
+    $query = "SELECT * FROM donors WHERE donor_id = '$donor_id'";
     $result = mysqli_query($db->connection, $query);
     return mysqli_fetch_assoc($result);
 }
 
-// Update student details
-public function update_student($student_id) {
+// Update donor details
+public function update_donor($donor_id) {
     global $db;
 
-    if (isset($_POST['btn_update_student'])) {
+    if (isset($_POST['btn_update_donor'])) {
         $name = $db->check($_POST['name']);
         $email = $db->check($_POST['email']);
         $phone = $db->check($_POST['phone']);
-        $department = $db->check($_POST['department']);
-        $year_of_study = $db->check($_POST['year_of_study']);
+        $department = $db->check($_POST['department'] ?? ($_POST['donor_code'] ?? ''));
+        $blood_group = $db->check($_POST['blood_group'] ?? '');
 
-        $query = "UPDATE students SET name='$name', email='$email', phone='$phone', reg_no='$department', year_of_study='$year_of_study' WHERE student_id='$student_id'";
+        $query = "UPDATE donors SET name='$name', email='$email', phone='$phone', donor_code='$department', blood_group='$blood_group' WHERE donor_id='$donor_id'";
         $result = mysqli_query($db->connection, $query);
 
         if ($result) {
              $this->set_message('<div class="alert alert-success text-center">Donor Updated Successfully</div>');
              echo '<script>setTimeout(() => window.location.href = "manage_donors.php", 2000);</script>';
         } else {
-            $this->set_message('<div class="alert alert-danger">Failed to Update Student!</div>');
+            $this->set_message('<div class="alert alert-danger">Failed to Update Donor!</div>');
         }
     }
 }
 
 
-    public function get_students() {
+    public function get_donors() {
         global $db;
-        $query = "SELECT * FROM students ORDER BY student_id DESC"; // Adjust according to your table structure
+        $query = "SELECT * FROM donors ORDER BY donor_id DESC"; // Adjust according to your table structure
         $result = mysqli_query($db->connection, $query);
         return mysqli_fetch_all($result, MYSQLI_ASSOC);
     }
 
 
-// Fetch students assigned to a given supervisor via projects.assigned_supervisor
+// (removed) legacy assignment helper
 // Every donor↔officer assignment (admin view of assigned_donors.php).
 
 
-// Fetch students assigned to a supervisor
+// Fetch donors assigned to a officer
 // Post a notice
-// Get all notices by supervisor
+// Get all notices by officer
 // Optional: delete notice
 // Get a single notice by ID
-// Get all notices posted by the supervisor of this student
+// Get all notices posted by the officer of this donor
 
 
-// Get all attendance records for a student
+// Get all attendance records for a donor
 
 // Get all seminars
-// Get the assigned supervisor and project for a student
+// Get the assigned officer and project for a donor
 // Save daily logbook entry
-// Fetch student logbook entries
+// Fetch donor logbook entries
 
 // Add weekly summary
-// Fetch student weekly summaries
-// Fetch all logbook entries that belong to students assigned to this supervisor
-// Fetch logbook entries for a single student, but only if the student is assigned to this supervisor
-// Supervisor reviews an entry: set status and comment
+// Fetch donor weekly summaries
+// Fetch all logbook entries that belong to donors assigned to this officer
+// Fetch logbook entries for a single donor, but only if the donor is assigned to this officer
+// Officer reviews an entry: set status and comment
 
-// Fetch weekly summaries from students assigned to this supervisor
-// Fetch weekly summaries for a single student only if assigned to this supervisor
-// Supervisor reviews a weekly summary
+// Fetch weekly summaries from donors assigned to this officer
+// Fetch weekly summaries for a single donor only if assigned to this officer
+// Officer reviews a weekly summary
 
 // Insert a chat message
-// Get chat history for supervisor <-> student
+// Get chat history for officer <-> donor
 // Mark messages as read (for the recipient)
 
 
 
-// Check if attendance already marked for student
+// Check if attendance already marked for donor
 // Mark attendance (ensures no duplicate for same day)
 
         //Admin Login
@@ -805,13 +757,13 @@ public function update_student($student_id) {
             $radius_clause = ($radius_km !== null && is_numeric($radius_km))
                 ? " AND $distance_expr <= " . (float)$radius_km : "";
             $query = "
-                SELECT student_id, name, email, phone, blood_group, last_donation_date,
+                SELECT donor_id, name, email, phone, blood_group, last_donation_date,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
                        CASE WHEN latitude IS NULL OR longitude IS NULL THEN NULL
                             ELSE ROUND($distance_expr, 1) END AS distance_km
-                FROM students
+                FROM donors
                 WHERE blood_group IN ($in_clause)
                   AND (last_donation_date IS NULL
                        OR DATEDIFF(CURDATE(), last_donation_date) >= " . self::DONATION_ELIGIBILITY_DAYS . ")
@@ -820,12 +772,12 @@ public function update_student($student_id) {
             ";
         } else {
             $query = "
-                SELECT student_id, name, email, phone, blood_group, last_donation_date,
+                SELECT donor_id, name, email, phone, blood_group, last_donation_date,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
                        NULL AS distance_km
-                FROM students
+                FROM donors
                 WHERE blood_group IN ($in_clause)
                 HAVING last_donation_date IS NULL
                        OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
@@ -850,7 +802,7 @@ public function update_student($student_id) {
         $units        = intval($units);
 
         // Re-check eligibility server-side (never trust the form alone)
-        $check = mysqli_query($db->connection, "SELECT last_donation_date FROM students WHERE student_id = '$donor_id'");
+        $check = mysqli_query($db->connection, "SELECT last_donation_date FROM donors WHERE donor_id = '$donor_id'");
         $donor_row = $check ? mysqli_fetch_assoc($check) : null;
 
         if (!$donor_row) {
@@ -861,10 +813,10 @@ public function update_student($student_id) {
             return ['success' => false, 'message' => "Donor is not yet eligible. $wait day(s) remaining of the 56-day window."];
         }
 
-        // Which bank banks this donation? The officer's bank (staff.blood_bank_id),
+        // Which bank banks this donation? The officer's bank (hospital_workers.blood_bank_id),
         // falling back to the first bank if the officer has none set.
         $bank_id = null;
-        $bres = mysqli_query($db->connection, "SELECT blood_bank_id FROM staff WHERE staff_id = '$officer_id'");
+        $bres = mysqli_query($db->connection, "SELECT blood_bank_id FROM hospital_workers WHERE worker_id = '$officer_id'");
         if ($bres && ($brow = mysqli_fetch_assoc($bres))) { $bank_id = $brow['blood_bank_id'] ? intval($brow['blood_bank_id']) : null; }
         if (!$bank_id) {
             $fb = mysqli_query($db->connection, "SELECT bank_id FROM blood_banks ORDER BY bank_id LIMIT 1");
@@ -888,7 +840,7 @@ public function update_student($student_id) {
             $donation_id = mysqli_insert_id($db->connection);
 
             // 2. Reset donor's 56-day clock
-            $query = "UPDATE students SET last_donation_date = '$today' WHERE student_id = '$donor_id'";
+            $query = "UPDATE donors SET last_donation_date = '$today' WHERE donor_id = '$donor_id'";
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
 
             // 3. Add donated units to THIS BANK's stock (create the row if missing).
@@ -956,10 +908,10 @@ public function update_student($student_id) {
         $res = mysqli_query($db->connection,
             "SELECT bb.*,
                     COALESCE(SUM(bs.units_available),0) AS total_units,
-                    COUNT(DISTINCT st.staff_id) AS officer_count
+                    COUNT(DISTINCT st.worker_id) AS officer_count
              FROM blood_banks bb
              LEFT JOIN blood_stock bs ON bs.blood_bank_id = bb.bank_id
-             LEFT JOIN staff st ON st.blood_bank_id = bb.bank_id
+             LEFT JOIN hospital_workers st ON st.blood_bank_id = bb.bank_id
              GROUP BY bb.bank_id
              ORDER BY bb.name ASC");
         return $res ? mysqli_fetch_all($res, MYSQLI_ASSOC) : [];
@@ -1031,10 +983,10 @@ public function update_student($student_id) {
         $recipient_id = intval($recipient_id);
         $query = "
             SELECT d.donation_id, d.blood_group, d.units, d.donation_date, d.status,
-                   s.student_id AS donor_id, s.name AS donor_name,
+                   s.donor_id AS donor_id, s.name AS donor_name,
                    br.patient_name, br.hospital_name
             FROM donations d
-            LEFT JOIN students s ON s.student_id = d.donor_id
+            LEFT JOIN donors s ON s.donor_id = d.donor_id
             LEFT JOIN blood_requests br ON br.request_id = d.request_id
             WHERE d.recipient_id = '$recipient_id'
             ORDER BY d.donation_date DESC

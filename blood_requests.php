@@ -3,8 +3,8 @@ require_once 'config/functions.php';  // starts session, connects DB, defines $d
 $ops = new operations();
 
 // Admins and hospital officers both manage the request queue (this page is in
-// both sidebars). Was supervisor-only, which bounced admins to the login form.
-if (empty($_SESSION['Active']) || !in_array($_SESSION['role'] ?? '', ['admin', 'supervisor'], true)) {
+// both sidebars). Was officer-only, which bounced admins to the login form.
+if (empty($_SESSION['Active']) || !in_array($_SESSION['role'] ?? '', ['admin', 'officer'], true)) {
     header('Location: login.php');
     exit;
 }
@@ -59,7 +59,7 @@ include 'inc/header.php';
                                 <td style="padding:10px;"><span style="color:<?php echo $urgencyColor; ?>; font-weight:600;"><?php echo htmlspecialchars($req['urgency_level']); ?></span></td>
                                 <td style="padding:10px;"><?php echo htmlspecialchars($req['status']); ?></td>
                                 <td style="padding:10px;">
-                                    <?php if (($_SESSION['role'] ?? '') === 'supervisor'): ?>
+                                    <?php if (($_SESSION['role'] ?? '') === 'officer'): ?>
                                         <a href="match_donor.php?request_id=<?php echo (int)$req['request_id']; ?>" class="btn btn-danger btn-sm">Match Donor</a>
                                     <?php else: ?>
                                         <span style="color:#999; font-size:.85rem;">Officer matches</span>

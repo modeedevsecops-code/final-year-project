@@ -14,8 +14,8 @@ function safe_count($db, $sql) {
 }
 
 // --- Summary stats (using real table names from donor_app.sql) ---
-$total_donors     = safe_count($db, "SELECT COUNT(*) AS c FROM students");
-$total_officers   = safe_count($db, "SELECT COUNT(*) AS c FROM staff");
+$total_donors     = safe_count($db, "SELECT COUNT(*) AS c FROM donors");
+$total_officers   = safe_count($db, "SELECT COUNT(*) AS c FROM hospital_workers");
 $pending_requests = safe_count($db, "SELECT COUNT(*) AS c FROM blood_requests WHERE status = 'Pending'");
 
 $active_alerts = safe_count($db, "SELECT COUNT(*) AS c FROM stock_alerts WHERE status = 'active'");

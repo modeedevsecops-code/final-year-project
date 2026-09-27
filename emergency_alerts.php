@@ -6,7 +6,7 @@ require_once 'config/db.php';
 require_once 'inc/header.php';
 
 // Donors only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
     header("Location: login.php");
     exit;
 }
@@ -14,9 +14,9 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
 // Fetch all emergency alerts, most recent first
 global $db;
 $result = mysqli_query($db->connection,
-    "SELECT n.*, COALESCE(s.staff_name, 'BloodLink Admin') AS posted_by
+    "SELECT n.*, COALESCE(s.name, 'BloodLink Admin') AS posted_by
      FROM notices n
-     LEFT JOIN staff s ON s.staff_id = n.supervisor_id
+     LEFT JOIN hospital_workers s ON s.worker_id = n.officer_id
      ORDER BY n.created_at DESC"
 );
 $notices = [];

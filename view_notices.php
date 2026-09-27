@@ -3,21 +3,21 @@ session_start();
 require_once 'config/db.php';
 require_once 'inc/header.php';
 
-// Only donors (students) can access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
+// Only donors (donors) can access
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
     header("Location: user-login.php");
     exit;
 }
 
-$student_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 0;
+$donor_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 0;
 $dbb = new operations();
 
 // Fetch ALL notices (not just from assigned officer) so donor sees every emergency alert
 global $db;
 $all_notices_res = mysqli_query($db->connection,
-    "SELECT n.*, COALESCE(s.staff_name, 'BloodLink Admin') AS officer_name
+    "SELECT n.*, COALESCE(s.name, 'BloodLink Admin') AS officer_name
      FROM notices n
-     LEFT JOIN staff s ON s.staff_id = n.supervisor_id
+     LEFT JOIN hospital_workers s ON s.worker_id = n.officer_id
      ORDER BY n.created_at DESC"
 );
 $notices = [];

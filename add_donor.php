@@ -13,7 +13,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
 
 $dbb = new operations();
 bl_csrf_check();          // BL-14
-$dbb->add_student(); // Call the function to handle donor addition
+$dbb->add_donor(); // Call the function to handle donor addition
 ?>
 
 <!DOCTYPE html>
@@ -49,12 +49,12 @@ $dbb->add_student(); // Call the function to handle donor addition
                     </div>
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="reg_no" class="form-label fw-bold">Donor ID / Reg No</label>
-                            <input type="text" class="form-control" id="reg_no" name="reg_no" placeholder="e.g. BL-2026-001" required>
+                            <label for="donor_code" class="form-label fw-bold">Donor ID / Reg No</label>
+                            <input type="text" class="form-control" id="donor_code" name="donor_code" placeholder="e.g. BL-2026-001" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="year_of_study" class="form-label fw-bold">Blood Group</label>
-                            <select class="form-control" id="year_of_study" name="year_of_study" required>
+                            <label for="blood_group" class="form-label fw-bold">Blood Group</label>
+                            <select class="form-control" id="blood_group" name="blood_group" required>
                                 <option value="">Select Blood Group</option>
                                 <option value="A+">A+</option>
                                 <option value="A-">A-</option>
@@ -77,7 +77,7 @@ $dbb->add_student(); // Call the function to handle donor addition
                     </div>
                     
                     <div class="d-flex gap-2">
-                        <button type="submit" name="btn_add_student" class="btn btn-danger px-4">Add Blood Donor</button>
+                        <button type="submit" name="btn_add_donor" class="btn btn-danger px-4">Add Blood Donor</button>
                         <a href="manage_donors.php" class="btn btn-outline-secondary px-4">Cancel</a>
                     </div>
                 </form>

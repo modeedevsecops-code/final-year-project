@@ -5,7 +5,7 @@ if (session_status() === PHP_SESSION_NONE) {
 require_once 'config/db.php';
 
 // Officers only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'supervisor') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'officer') {
     header("Location: login.php");
     exit();
 }

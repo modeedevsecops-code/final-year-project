@@ -2,11 +2,11 @@
 --  BloodLink — Enhanced Blood Bank Management System
 --  Canonical schema (v3). Aligned with the project brief's ERD (Figure 5.3):
 --  the design centres on blood_banks (registered facilities), with blood_stock
---  and stock_alerts scoped PER BANK, and staff (hospital officers) belonging to
+--  and stock_alerts scoped PER BANK, and hospital_workers (hospital officers) belonging to
 --  a bank. The Blood Bank Locator ranks these banks by distance and routes to
 --  them (Nominatim + OSRM).
 --
---  Tables: login, blood_banks, staff, students (donors), recipients,
+--  Tables: login, blood_banks, hospital_workers, donors, recipients,
 --          blood_requests, notices, donations, blood_stock, stock_alerts.
 --
 --  Import:  mysql -u root donor_app < db/schema.sql
@@ -24,8 +24,8 @@ DROP TABLE IF EXISTS `donations`;
 DROP TABLE IF EXISTS `recipients`;
 DROP TABLE IF EXISTS `notices`;
 DROP TABLE IF EXISTS `blood_requests`;
-DROP TABLE IF EXISTS `students`;
-DROP TABLE IF EXISTS `staff`;
+DROP TABLE IF EXISTS `donors`;
+DROP TABLE IF EXISTS `hospital_workers`;
 DROP TABLE IF EXISTS `blood_banks`;
 DROP TABLE IF EXISTS `login`;
 
@@ -58,33 +58,33 @@ CREATE TABLE `blood_banks` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Registered blood-bank facilities';
 
--- ---------------------------------------------------------------- staff ----
--- Hospital officers. Each belongs to a blood bank (brief ERD: staff.hospital_id).
-CREATE TABLE `staff` (
-  `staff_id`        INT(11) NOT NULL AUTO_INCREMENT,
-  `staff_name`      VARCHAR(100) NOT NULL,
+-- ---------------------------------------------------------------- hospital_workers ----
+-- Hospital officers. Each belongs to a blood bank.
+CREATE TABLE `hospital_workers` (
+  `worker_id`        INT(11) NOT NULL AUTO_INCREMENT,
+  `name`      VARCHAR(100) NOT NULL,
   `phone`           VARCHAR(20)  NOT NULL,
   `email`           VARCHAR(100) NOT NULL,
   `position`        VARCHAR(150) NOT NULL,
   `blood_bank_id`   INT(11)      DEFAULT NULL COMMENT 'FK -> blood_banks.bank_id',
   `password`        VARCHAR(255) NOT NULL,
   `date_registered` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`staff_id`),
-  UNIQUE KEY `uq_staff_email` (`email`),
-  KEY `fk_staff_bank` (`blood_bank_id`),
-  CONSTRAINT `fk_staff_bank` FOREIGN KEY (`blood_bank_id`)
+  PRIMARY KEY (`worker_id`),
+  UNIQUE KEY `uq_hospital_workers_email` (`email`),
+  KEY `fk_hospital_workers_bank` (`blood_bank_id`),
+  CONSTRAINT `fk_hospital_workers_bank` FOREIGN KEY (`blood_bank_id`)
     REFERENCES `blood_banks` (`bank_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Hospital officers / blood bank staff';
+  COMMENT='Hospital officers';
 
--- ------------------------------------------------------------- students ----
--- Blood donors. (Table name retained from the original codebase.)
-CREATE TABLE `students` (
-  `student_id`          INT(11) NOT NULL AUTO_INCREMENT,
+-- ------------------------------------------------------------- donors ----
+-- Blood donors.
+CREATE TABLE `donors` (
+  `donor_id`          INT(11) NOT NULL AUTO_INCREMENT,
   `name`                VARCHAR(100) NOT NULL,
   `email`               VARCHAR(100) NOT NULL,
   `phone`               VARCHAR(20)  NOT NULL,
-  `reg_no`              VARCHAR(100) NOT NULL COMMENT 'Donor ID used at login',
+  `donor_code`              VARCHAR(100) NOT NULL COMMENT 'Donor ID used at login',
   `blood_group`         VARCHAR(5)   DEFAULT NULL COMMENT 'A+ A- B+ B- AB+ AB- O+ O-',
   `last_donation_date`  DATE         DEFAULT NULL COMMENT 'NULL = never donated; drives the 56-day rule',
   `address`             VARCHAR(255) DEFAULT NULL,
@@ -93,11 +93,11 @@ CREATE TABLE `students` (
   `password`            VARCHAR(255) NOT NULL,
   `created_at`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`student_id`),
-  UNIQUE KEY `uq_students_email` (`email`),
-  KEY `idx_students_blood_group` (`blood_group`),
-  KEY `idx_students_reg_no` (`reg_no`),
-  KEY `idx_students_geo` (`latitude`,`longitude`)
+  PRIMARY KEY (`donor_id`),
+  UNIQUE KEY `uq_donors_email` (`email`),
+  KEY `idx_donors_blood_group` (`blood_group`),
+  KEY `idx_donors_donor_code` (`donor_code`),
+  KEY `idx_donors_geo` (`latitude`,`longitude`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Blood donors';
 
@@ -143,26 +143,26 @@ CREATE TABLE `blood_requests` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ------------------------------------------------------------- notices ----
--- Emergency alerts. supervisor_id NULL = system-generated.
+-- Emergency alerts. officer_id NULL = system-generated.
 CREATE TABLE `notices` (
   `notice_id`     INT(11) NOT NULL AUTO_INCREMENT,
-  `supervisor_id` INT(11) DEFAULT NULL COMMENT 'NULL = system-generated alert',
+  `officer_id` INT(11) DEFAULT NULL COMMENT 'NULL = system-generated alert',
   `title`         VARCHAR(255) NOT NULL,
   `message`       TEXT NOT NULL,
   `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`notice_id`),
-  KEY `fk_notice_supervisor` (`supervisor_id`),
-  CONSTRAINT `fk_notice_supervisor` FOREIGN KEY (`supervisor_id`)
-    REFERENCES `staff` (`staff_id`) ON DELETE SET NULL
+  KEY `fk_notice_officer` (`officer_id`),
+  CONSTRAINT `fk_notice_officer` FOREIGN KEY (`officer_id`)
+    REFERENCES `hospital_workers` (`worker_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- ----------------------------------------------------------- donations ----
 CREATE TABLE `donations` (
   `donation_id`   INT(11) NOT NULL AUTO_INCREMENT,
-  `donor_id`      INT(11) NOT NULL COMMENT 'FK -> students.student_id',
+  `donor_id`      INT(11) NOT NULL COMMENT 'FK -> donors.donor_id',
   `recipient_id`  INT(11) DEFAULT NULL,
   `request_id`    INT(11) DEFAULT NULL,
-  `officer_id`    INT(11) NOT NULL COMMENT 'FK -> staff.staff_id, who confirmed it',
+  `officer_id`    INT(11) NOT NULL COMMENT 'FK -> hospital_workers.worker_id, who confirmed it',
   `blood_bank_id` INT(11) DEFAULT NULL COMMENT 'FK -> blood_banks.bank_id, where it was banked',
   `blood_group`   VARCHAR(5) NOT NULL,
   `units`         INT(11) NOT NULL DEFAULT 1,
@@ -176,7 +176,7 @@ CREATE TABLE `donations` (
   KEY `fk_donation_request` (`request_id`),
   KEY `fk_donation_bank` (`blood_bank_id`),
   CONSTRAINT `fk_donation_donor` FOREIGN KEY (`donor_id`)
-    REFERENCES `students` (`student_id`) ON DELETE CASCADE,
+    REFERENCES `donors` (`donor_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_donation_recipient` FOREIGN KEY (`recipient_id`)
     REFERENCES `recipients` (`recipient_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_donation_request` FOREIGN KEY (`request_id`)

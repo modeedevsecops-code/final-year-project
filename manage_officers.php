@@ -18,7 +18,7 @@ $dbb = new operations();
 $form_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     bl_csrf_check();      // BL-14
-    $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
+    $name = mysqli_real_escape_string($conn, trim($_POST['name']));
     $email = mysqli_real_escape_string($conn, trim($_POST['email']));
     $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
     $position = mysqli_real_escape_string($conn, trim($_POST['position'] ?: 'Blood Bank Officer'));
@@ -28,9 +28,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     $plain_password = trim($_POST['password']);
     $password = password_hash($plain_password, PASSWORD_DEFAULT);
 
-    if ($staff_name && $email && $phone && $plain_password !== '') {
-        $q = "INSERT INTO staff (staff_name, phone, email, position, blood_bank_id, password)
-              VALUES ('$staff_name', '$phone', '$email', '$position', $bank_sql, '$password')";
+    if ($name && $email && $phone && $plain_password !== '') {
+        $q = "INSERT INTO hospital_workers (name, phone, email, position, blood_bank_id, password)
+              VALUES ('$name', '$phone', '$email', '$position', $bank_sql, '$password')";
         if (mysqli_query($conn, $q)) {
             $form_msg = '<div class="alert alert-success">Hospital Officer added successfully!</div>';
         } else {
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
     bl_csrf_check(); // BL-14 — was a CSRF-able GET link
     $del_id = intval($_POST['delete_id']);
-    if ($stmt = mysqli_prepare($conn, "DELETE FROM staff WHERE staff_id = ?")) {
+    if ($stmt = mysqli_prepare($conn, "DELETE FROM hospital_workers WHERE worker_id = ?")) {
         mysqli_stmt_bind_param($stmt, "i", $del_id);
         mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
@@ -61,14 +61,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
 // ─────────────────────────────────────────────────
 $officers_res = mysqli_query(
     $conn,
-    "SELECT s.staff_id, s.staff_name, s.email, s.phone, s.position, s.date_registered,
+    "SELECT s.worker_id, s.name, s.email, s.phone, s.position, s.date_registered,
             bb.name AS bank_name,
             COUNT(d.donation_id) AS donation_count
-     FROM staff s
+     FROM hospital_workers s
      LEFT JOIN blood_banks bb ON bb.bank_id = s.blood_bank_id
-     LEFT JOIN donations d ON d.officer_id = s.staff_id
-     GROUP BY s.staff_id
-     ORDER BY s.staff_name ASC"
+     LEFT JOIN donations d ON d.officer_id = s.worker_id
+     GROUP BY s.worker_id
+     ORDER BY s.name ASC"
 );
 $ops_banks = (new operations())->get_blood_banks();
 $officers = [];
@@ -144,7 +144,7 @@ if ($officers_res) {
                                         foreach ($officers as $officer): ?>
                                             <tr>
                                                 <td><?php echo $i++; ?></td>
-                                                <td class="fw-bold"><?php echo htmlspecialchars($officer['staff_name']); ?></td>
+                                                <td class="fw-bold"><?php echo htmlspecialchars($officer['name']); ?></td>
                                                 <td><?php echo htmlspecialchars($officer['email']); ?></td>
                                                 <td><?php echo htmlspecialchars($officer['phone']); ?></td>
                                                 <td>
@@ -168,7 +168,7 @@ if ($officers_res) {
                                                     <form method="POST" style="display:inline;"
                                                           onsubmit="return confirm('Delete this hospital officer? This cannot be undone.')">
                                                         <?php bl_csrf_field(); // BL-14 ?>
-                                                        <input type="hidden" name="delete_id" value="<?php echo (int)$officer['staff_id']; ?>">
+                                                        <input type="hidden" name="delete_id" value="<?php echo (int)$officer['worker_id']; ?>">
                                                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                                                     </form>
                                                 </td>
@@ -198,7 +198,7 @@ if ($officers_res) {
 
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
-                                <input type="text" name="staff_name" class="form-control"
+                                <input type="text" name="name" class="form-control"
                                     placeholder="e.g. Dr. Aliyu Bello" required>
                             </div>
 

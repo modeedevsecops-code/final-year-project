@@ -3,16 +3,16 @@ require_once 'config/db.php';
 require_once 'inc/header.php';
 
 // Donor-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
     header("Location: user-login.php");
     exit;
 }
 
-$student_id = $_SESSION['user_id'];
+$donor_id = $_SESSION['user_id'];
 $ops = new operations();
 
 // Reuse the real eligibility logic already used by match_donor.php
-$check = mysqli_query($db->connection, "SELECT last_donation_date FROM students WHERE student_id = '" . intval($student_id) . "'");
+$check = mysqli_query($db->connection, "SELECT last_donation_date FROM donors WHERE donor_id = '" . intval($donor_id) . "'");
 $donor_row = $check ? mysqli_fetch_assoc($check) : null;
 
 $is_eligible = $donor_row ? $ops->is_donor_eligible($donor_row['last_donation_date']) : false;

@@ -35,8 +35,8 @@
                 $dashboardLink = 'index.php';
                 switch ($_SESSION['role']) {
                     case 'admin': $dashboardLink = 'dashboard.php'; break;
-                    case 'supervisor': $dashboardLink = 'officer_dashboard.php'; break;
-                    case 'student': $dashboardLink = 'donor_dashboard.php'; break;
+                    case 'officer': $dashboardLink = 'officer_dashboard.php'; break;
+                    case 'donor': $dashboardLink = 'donor_dashboard.php'; break;
                     case 'recipient': $dashboardLink = 'recipient_dashboard.php'; break;
                 }
                 ?>
@@ -57,10 +57,10 @@
 $current_page = basename($_SERVER['PHP_SELF']);
 
 // Login sets $_SESSION['name']; older code wrote user_name. Prefer the one that
-// exists so the topbar shows the real name, not "Admin"/"Supervisor" (BL-20).
+// exists so the topbar shows the real name, not "Admin"/"Officer" (BL-20).
 $displayName = $_SESSION['name']
     ?? $_SESSION['user_name']
-    ?? $_SESSION['reg_no']
+    ?? $_SESSION['donor_code']
     ?? ucfirst($_SESSION['role'] ?? 'User');
 
 $avatarLetter = strtoupper(substr(trim($displayName), 0, 1));
@@ -69,8 +69,8 @@ if ($avatarLetter === '') { $avatarLetter = 'U'; }
 // Where this role's Dashboard lives (used by the topbar menu).
 switch ($_SESSION['role'] ?? '') {
     case 'admin':      $dashLinkForRole = 'dashboard.php'; break;
-    case 'supervisor': $dashLinkForRole = 'officer_dashboard.php'; break;
-    case 'student':    $dashLinkForRole = 'donor_dashboard.php'; break;
+    case 'officer': $dashLinkForRole = 'officer_dashboard.php'; break;
+    case 'donor':    $dashLinkForRole = 'donor_dashboard.php'; break;
     case 'recipient':  $dashLinkForRole = 'recipient_dashboard.php'; break;
     default:           $dashLinkForRole = 'index.php';
 }
@@ -96,7 +96,7 @@ switch ($_SESSION['role'] ?? '') {
                     <div class="topbar-avatar"><?php echo htmlspecialchars($avatarLetter); ?></div>
                     <div>
                         <div class="tm-name"><?php echo htmlspecialchars($displayName); ?></div>
-                        <div class="tm-role"><?php echo htmlspecialchars(ucfirst($_SESSION['role'] === 'supervisor' ? 'Hospital Officer' : ($_SESSION['role'] === 'student' ? 'Donor' : $_SESSION['role']))); ?></div>
+                        <div class="tm-role"><?php echo htmlspecialchars(ucfirst($_SESSION['role'] === 'officer' ? 'Hospital Officer' : ($_SESSION['role'] === 'donor' ? 'Donor' : $_SESSION['role']))); ?></div>
                     </div>
                 </div>
                 <a class="topbar-menu-item" href="<?php echo $dashLinkForRole ?? '#'; ?>"><i class="fas fa-gauge"></i> Dashboard</a>
@@ -128,7 +128,7 @@ switch ($_SESSION['role'] ?? '') {
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php
-        } elseif ($_SESSION['role'] == 'supervisor' ) {
+        } elseif ($_SESSION['role'] == 'officer' ) {
         ?>
             <li><a class="nav-link <?php echo $current_page=='officer_dashboard.php'?'active':''; ?>" href="officer_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='assigned_donors.php'?'active':''; ?>" href="assigned_donors.php"><i class="fas fa-users"></i> Donors</a></li>
@@ -138,7 +138,7 @@ switch ($_SESSION['role'] ?? '') {
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php
-        } elseif ($_SESSION['role'] == 'student' ) {
+        } elseif ($_SESSION['role'] == 'donor' ) {
         ?>
             <li><a class="nav-link <?php echo $current_page=='donor_dashboard.php'?'active':''; ?>" href="donor_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='donation_form.php'?'active':''; ?>" href="donation_form.php"><i class="fas fa-tint"></i> Donate Blood</a></li>

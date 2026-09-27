@@ -3,34 +3,34 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
-// Redirect if not a donor (student role)
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'student') {
+// Redirect if not a donor (donor role)
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
     header("Location: login.php");
     exit();
 }
 
 include 'config/db.php';
 
-$student_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 0;
+$donor_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 0;
 
-// Fallback: look up by reg_no if user_id not set
-if (!$student_id && !empty($_SESSION['reg_no'])) {
-    $reg_no = mysqli_real_escape_string($db->connection, $_SESSION['reg_no']);
-    $res = mysqli_query($db->connection, "SELECT student_id FROM students WHERE reg_no = '$reg_no'");
+// Fallback: look up by donor_code if user_id not set
+if (!$donor_id && !empty($_SESSION['donor_code'])) {
+    $donor_code = mysqli_real_escape_string($db->connection, $_SESSION['donor_code']);
+    $res = mysqli_query($db->connection, "SELECT donor_id FROM donors WHERE donor_code = '$donor_code'");
     if ($res && mysqli_num_rows($res)) {
         $r = mysqli_fetch_assoc($res);
-        $student_id = intval($r['student_id']);
+        $donor_id = intval($r['donor_id']);
     }
 }
 
-$student = null;
-if ($student_id) {
-    $stmt = mysqli_query($db->connection, "SELECT student_id, name, reg_no FROM students WHERE student_id = $student_id");
-    if ($stmt) $student = mysqli_fetch_assoc($stmt);
+$donor = null;
+if ($donor_id) {
+    $stmt = mysqli_query($db->connection, "SELECT donor_id, name, donor_code FROM donors WHERE donor_id = $donor_id");
+    if ($stmt) $donor = mysqli_fetch_assoc($stmt);
 }
 
-$userName = $student['name'] ?? $_SESSION['user_name'] ?? 'Test User';
-$donorId  = $student['reg_no'] ?? $_SESSION['reg_no'] ?? 'N/A';
+$userName = $donor['name'] ?? $_SESSION['user_name'] ?? 'Test User';
+$donorId  = $donor['donor_code'] ?? $_SESSION['donor_code'] ?? 'N/A';
 ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">

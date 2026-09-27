@@ -3,11 +3,11 @@ require_once 'config/functions.php';  // this already starts the session, connec
 $ops = new operations();
 
 // --- Officer auth guard, matching your real login session keys ---
-if (!isset($_SESSION['Active']) || $_SESSION['role'] !== 'supervisor') {
+if (!isset($_SESSION['Active']) || $_SESSION['role'] !== 'officer') {
     header('Location: login.php');
     exit;
 }
-$officer_id = $_SESSION['user_id']; // staff_id, set during supervisor login
+$officer_id = $_SESSION['user_id']; // worker_id, set during officer login
 
 $request_id = isset($_GET['request_id']) ? (int)$_GET['request_id'] : 0;
 $feedback = null;
@@ -104,7 +104,7 @@ $has_request_geo = $request && is_numeric($request['latitude'] ?? null) && is_nu
               <td>
                 <form method="POST" onsubmit="return confirm('Confirm this donation match?');">
                   <?php bl_csrf_field(); // BL-14 ?>
-                  <input type="hidden" name="donor_id" value="<?= (int)$donor['student_id'] ?>">
+                  <input type="hidden" name="donor_id" value="<?= (int)$donor['donor_id'] ?>">
                   <input type="hidden" name="recipient_id" value="<?= (int)($request['recipient_id'] ?? 0) ?>">
                   <input type="hidden" name="request_id" value="<?= (int)$request['request_id'] ?>">
                   <input type="hidden" name="blood_group" value="<?= htmlspecialchars($request['blood_group']) ?>">

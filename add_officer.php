@@ -16,7 +16,7 @@ $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     bl_csrf_check();      // BL-14
-    $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
+    $name = mysqli_real_escape_string($conn, trim($_POST['name']));
     $email      = mysqli_real_escape_string($conn, trim($_POST['email']));
     $phone      = mysqli_real_escape_string($conn, trim($_POST['phone']));
     $position   = mysqli_real_escape_string($conn, trim($_POST['position'] ?: 'Blood Bank Officer'));
@@ -25,9 +25,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     // Hash the officer's password at creation (BL-12).
     $password   = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
 
-    if ($staff_name && $email && $phone && !empty(trim($_POST['password']))) {
-        $q = "INSERT INTO staff (staff_name, phone, email, position, blood_bank_id, password)
-              VALUES ('$staff_name', '$phone', '$email', '$position', $bank_sql, '$password')";
+    if ($name && $email && $phone && !empty(trim($_POST['password']))) {
+        $q = "INSERT INTO hospital_workers (name, phone, email, position, blood_bank_id, password)
+              VALUES ('$name', '$phone', '$email', '$position', $bank_sql, '$password')";
         if (mysqli_query($conn, $q)) {
             $msg = '<div class="alert alert-success text-center">Hospital Officer added successfully! <a href="manage_officers.php">View all officers</a></div>';
         } else {
@@ -63,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
                     <?php bl_csrf_field(); // BL-14 ?>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="staff_name"
+                        <input type="text" class="form-control" name="name"
                                placeholder="e.g. Dr. Aliyu Bello" required>
                     </div>
 

@@ -16,7 +16,7 @@
 --  CREDENTIALS
 --    Admin      login.php        admin / admin
 --    Officers   user-login.php   <email> / Officer@123
---    Donors     user-login.php   <reg_no> / Donor@123
+--    Donors     user-login.php   <donor_code> / Donor@123
 --    Recipients user-login.php   <email>  / Recipient@123
 -- ============================================================================
 
@@ -28,8 +28,8 @@ TRUNCATE TABLE `donations`;
 TRUNCATE TABLE `notices`;
 TRUNCATE TABLE `blood_requests`;
 TRUNCATE TABLE `recipients`;
-TRUNCATE TABLE `students`;
-TRUNCATE TABLE `staff`;
+TRUNCATE TABLE `donors`;
+TRUNCATE TABLE `hospital_workers`;
 TRUNCATE TABLE `blood_banks`;
 TRUNCATE TABLE `login`;
 SET FOREIGN_KEY_CHECKS = 1;
@@ -48,14 +48,14 @@ INSERT INTO `blood_banks` (`bank_id`,`name`,`address`,`latitude`,`longitude`,`co
 (5, 'Aminu Kano Teaching Hospital',         'Zaria Road, Kano',                    11.9800000, 8.5300000, '08030000005');
 
 -- --------------------------------------------------------------- officers --
--- Each officer belongs to a blood bank (staff.blood_bank_id).
-INSERT INTO `staff` (`staff_id`, `staff_name`, `phone`, `email`, `position`, `blood_bank_id`, `password`) VALUES
+-- Each officer belongs to a blood bank (hospital_workers.blood_bank_id).
+INSERT INTO `hospital_workers` (`worker_id`, `name`, `phone`, `email`, `position`, `blood_bank_id`, `password`) VALUES
 (1, 'Maryam Ibrahim', '08127494994', 'maryam@bloodlink.test', 'Blood Bank Officer', 1, '$2y$12$5SPz3nCmiahAt0ovpXc6OeybV163.l07y9fypcMdKX7Fk.vltpLHC'),
 (2, 'Samuel Adeyemi', '08031122334', 'samuel@bloodlink.test', 'Blood Bank Officer', 4, '$2y$12$5SPz3nCmiahAt0ovpXc6OeybV163.l07y9fypcMdKX7Fk.vltpLHC');
 
 -- ----------------------------------------------------------------- donors --
-INSERT INTO `students`
-  (`student_id`,`name`,`email`,`phone`,`reg_no`,`blood_group`,`last_donation_date`,`address`,`latitude`,`longitude`,`password`) VALUES
+INSERT INTO `donors`
+  (`donor_id`,`name`,`email`,`phone`,`donor_code`,`blood_group`,`last_donation_date`,`address`,`latitude`,`longitude`,`password`) VALUES
 (1, 'Zainab Auwal',     'zainab@bloodlink.test',  '08023456701', 'BL-KD-001', 'O-',  NULL,
     'Ahmadu Bello Way, Kaduna',            10.5222000,  7.4383000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
 (2, 'Kamalu Yahaya',    'kamalu@bloodlink.test',  '08023456702', 'BL-KD-002', 'O+',  NULL,
@@ -113,7 +113,7 @@ INSERT INTO `blood_requests`
 (4, 1, 'Hassan Umar',  'A+',  1, 'Barau Dikko Teaching Hospital',       'Kaduna',      10.5105000, 7.4165000, 'Normal',             'Fulfilled','Hassan Umar',  '08051112201');
 
 -- ----------------------------------------------------------- notices -------
-INSERT INTO `notices` (`supervisor_id`,`title`,`message`) VALUES
+INSERT INTO `notices` (`officer_id`,`title`,`message`) VALUES
 (1,    'O- donors needed at Barau Dikko', 'We are critically low on O-. Any eligible O- donor please report to the blood bank.'),
 (NULL, 'Emergency: O- blood needed at Barau Dikko Teaching Hospital',
        '2 unit(s) of O- needed urgently for patient Hassan Umar at Barau Dikko Teaching Hospital (Kaduna). Contact: 08051112201.');

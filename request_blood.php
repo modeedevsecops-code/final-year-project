@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $title = "Emergency: $bloodGroup blood needed at $hospitalName";
                 $message = "$unitsNeeded unit(s) of $bloodGroup needed urgently for patient $patientName at $hospitalName ($location). Contact: $contactPhone.";
                 $alertStmt = mysqli_prepare($db_conn,
-                    "INSERT INTO notices (title, message, supervisor_id, created_at) VALUES (?, ?, NULL, NOW())"
+                    "INSERT INTO notices (title, message, officer_id, created_at) VALUES (?, ?, NULL, NOW())"
                 );
                 mysqli_stmt_bind_param($alertStmt, "ss", $title, $message);
                 mysqli_stmt_execute($alertStmt);

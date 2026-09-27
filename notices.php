@@ -3,8 +3,8 @@ session_start();
 require_once 'config/db.php';
 require_once 'inc/header.php';
 
-// Allow both admin AND hospital officers (supervisors) to post emergency alerts
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervisor'])) {
+// Allow both admin and hospital officers to post emergency alerts
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'officer'])) {
     header("Location: login.php");
     exit;
 }
@@ -12,11 +12,11 @@ if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervi
 $is_admin = ($_SESSION['role'] === 'admin');
 
 // Determine the poster ID:
-// Admin uses user_id from login table session; officer uses supervisor_id
+// Admin uses user_id from login table session; officer uses officer_id
 if ($is_admin) {
     $poster_id = isset($_SESSION['user']) ? intval($_SESSION['user']) : 1; // admin user_id
 } else {
-    $poster_id = isset($_SESSION['supervisor_id']) ? intval($_SESSION['supervisor_id']) : 0;
+    $poster_id = isset($_SESSION['officer_id']) ? intval($_SESSION['officer_id']) : 0;
 }
 
 $dbb = new operations();
@@ -29,7 +29,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_post_notice'])) {
     $message = htmlspecialchars(trim($_POST['message']));
 
     if (!empty($title) && !empty($message)) {
-        $dbb->post_notice($poster_id, $title, $message);
+        // Admin posts have no hospital_workers row, so officer_id is NULL for them.
+        global $db;
+        $officer_sql = $is_admin ? 'NULL' : intval($poster_id);
+        if ($stmt = mysqli_prepare($db->connection,
+                "INSERT INTO notices (officer_id, title, message) VALUES (" . $officer_sql . ", ?, ?)")) {
+            mysqli_stmt_bind_param($stmt, "ss", $title, $message);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
+        }
         $post_success = "Emergency alert posted successfully!";
     }
 }
@@ -39,9 +47,9 @@ if ($is_admin) {
     // Fetch all notices across all officers
     global $db;
     $result = mysqli_query($db->connection,
-        "SELECT n.*, COALESCE(s.staff_name, 'BloodLink Admin') AS posted_by
+        "SELECT n.*, COALESCE(s.name, 'BloodLink Admin') AS posted_by
          FROM notices n
-         LEFT JOIN staff s ON s.staff_id = n.supervisor_id
+         LEFT JOIN hospital_workers s ON s.worker_id = n.officer_id
          ORDER BY n.created_at DESC"
     );
     $notices = [];
@@ -49,12 +57,11 @@ if ($is_admin) {
         $notices[] = $row;
     }
 } else {
-    $notices = $dbb->get_supervisor_notices($poster_id);
-    // Add a "posted_by" key for uniform rendering
-    foreach ($notices as &$n) {
-        $n['posted_by'] = 'You';
-    }
-    unset($n);
+    global $db;
+    $result = mysqli_query($db->connection,
+        "SELECT * FROM notices WHERE officer_id = " . intval($poster_id) . " ORDER BY created_at DESC");
+    $notices = [];
+    while ($row = mysqli_fetch_assoc($result)) { $row['posted_by'] = 'You'; $notices[] = $row; }
 }
 ?>
 

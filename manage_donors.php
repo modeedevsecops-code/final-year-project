@@ -5,8 +5,8 @@ bl_require_role('admin');   // BL-25: this page leaked every donor name/email to
 
 $dbb = new operations();
 bl_csrf_check();        // BL-14 (covers both add and delete POSTs below)
-$dbb->add_student(); // Handles adding a new donor
-$dbb->delete_student(); // Handles deleting a donor
+$dbb->add_donor(); // Handles adding a new donor
+$dbb->delete_donor(); // Handles deleting a donor
 
 include 'inc/header.php';
 ?>
@@ -50,8 +50,8 @@ include 'inc/header.php';
             <div class="row">
               <div class="col-md-6">
                 <div class="form-group">
-                  <label for="reg_no">Donor ID / Reg. Number</label>
-                  <input type="text" class="form-control" id="reg_no" name="reg_no" required
+                  <label for="donor_code">Donor ID / Reg. Number</label>
+                  <input type="text" class="form-control" id="donor_code" name="donor_code" required
                      placeholder="e.g. BLK/2024/00001">
                 </div>
               </div>
@@ -59,7 +59,7 @@ include 'inc/header.php';
               <div class="col-md-6">
                 <div class="form-group">
                   <label for="blood_type">Blood Type</label>
-                  <select name="year_of_study" id="blood_type" class="form-control">
+                  <select name="blood_group" id="blood_type" class="form-control">
                     <option value="A+">A+</option>
                     <option value="A-">A-</option>
                     <option value="B+">B+</option>
@@ -87,7 +87,7 @@ include 'inc/header.php';
               </div>
             </div>
             <br>
-            <button type="submit" name="btn_add_student" class="btn btn-danger">Add Donor</button>
+            <button type="submit" name="btn_add_donor" class="btn btn-danger">Add Donor</button>
           </form>
 
           <hr>
@@ -113,21 +113,21 @@ include 'inc/header.php';
             <tbody>
               <?php
               $counter = 1;
-              $students = $dbb->get_students(); // Fetch all donors
-              foreach ($students as $student) {
+              $donors = $dbb->get_donors(); // Fetch all donors
+              foreach ($donors as $donor) {
                 echo '<tr>
                         <td>' . $counter++ . '</td>
-                        <td>' . $student['name'] . '</td>
-                        <td>' . $student['email'] . '</td>
-                        <td>' . $student['phone'] . '</td>
-                        <td>' . $student['reg_no'] . '</td>
-                        <td><span class="badge bg-danger">' . htmlspecialchars($student['blood_group'] ?? 'N/A') . '</span></td>
+                        <td>' . $donor['name'] . '</td>
+                        <td>' . $donor['email'] . '</td>
+                        <td>' . $donor['phone'] . '</td>
+                        <td>' . $donor['donor_code'] . '</td>
+                        <td><span class="badge bg-danger">' . htmlspecialchars($donor['blood_group'] ?? 'N/A') . '</span></td>
                         <td>
-                          <a href="edit_donor.php?id=' . $student['student_id'] . '" class="btn btn-warning btn-sm">Edit</a>
+                          <a href="edit_donor.php?id=' . $donor['donor_id'] . '" class="btn btn-warning btn-sm">Edit</a>
                           <form action="" method="POST" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="' . htmlspecialchars(bl_csrf_token()) . '">
-                            <input type="hidden" name="student_id" value="' . $student['student_id'] . '">
-                            <button type="submit" name="btn_delete_student" class="btn btn-danger btn-sm">Delete</button>
+                            <input type="hidden" name="donor_id" value="' . $donor['donor_id'] . '">
+                            <button type="submit" name="btn_delete_donor" class="btn btn-danger btn-sm">Delete</button>
                           </form>
                         </td>
                       </tr>';

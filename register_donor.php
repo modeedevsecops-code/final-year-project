@@ -11,26 +11,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])
   $name = mysqli_real_escape_string($conn, trim($_POST['name']));
   $email = mysqli_real_escape_string($conn, trim($_POST['email']));
   $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
-  $reg_no = mysqli_real_escape_string($conn, trim($_POST['reg_no']));
+  $donor_code = mysqli_real_escape_string($conn, trim($_POST['donor_code']));
   $blood_group = mysqli_real_escape_string($conn, trim($_POST['blood_group']));
   $address_raw = trim($_POST['address'] ?? '');
   $address = mysqli_real_escape_string($conn, $address_raw);
   $password = mysqli_real_escape_string($conn, trim($_POST['password']));
 
   // Check duplicate email
-  $dup = mysqli_query($conn, "SELECT student_id FROM students WHERE email='$email' LIMIT 1");
+  $dup = mysqli_query($conn, "SELECT donor_id FROM donors WHERE email='$email' LIMIT 1");
   if (mysqli_num_rows($dup) > 0) {
     $msg = '<div class="alert alert-danger text-center">Registration failed. Email is already registered!</div>';
   } else {
     // The blood group belongs in blood_group. It used to be written into
-    // year_of_study, which is why donor matching (which reads blood_group)
+    // the legacy academic column, which is why donor matching (which reads blood_group)
     // never found anybody. See db/schema.sql.
     // Geocode the address once via Nominatim so the donor appears on the map (Phase 3).
     list($lat, $lng) = bl_geocode($address_raw);
     $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'NULL';
     $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'NULL';
-    $q = "INSERT INTO students (name, email, phone, reg_no, blood_group, address, latitude, longitude, password)
-              VALUES ('$name', '$email', '$phone', '$reg_no', '$blood_group', '$address', $lat_sql, $lng_sql, '$password')";
+    $q = "INSERT INTO donors (name, email, phone, donor_code, blood_group, address, latitude, longitude, password)
+              VALUES ('$name', '$email', '$phone', '$donor_code', '$blood_group', '$address', $lat_sql, $lng_sql, '$password')";
     if (mysqli_query($conn, $q)) {
       $msg = '<div class="alert alert-success text-center">Donor registration successful! You can now <a href="user-login.php">login</a>.</div>';
     } else {
@@ -86,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])
         </div>
         <div class="col-md-6 mb-3">
           <label class="form-label fw-bold">Donor ID / Preferred Reg No</label>
-          <input type="text" class="form-control" name="reg_no" placeholder="e.g. BL-KD-099" required>
+          <input type="text" class="form-control" name="donor_code" placeholder="e.g. BL-KD-099" required>
         </div>
       </div>
 

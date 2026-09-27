@@ -3,7 +3,7 @@
 // pool, not a personal roster — so this lists every donor with their blood
 // group and current 56-day eligibility. Admins and officers both use it.
 require_once 'config/db.php';
-if (empty($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervisor'], true)) {
+if (empty($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'officer'], true)) {
     header('Location: login.php');
     exit;
 }
@@ -13,8 +13,8 @@ $conn = $db->connection;
 
 $donors = [];
 $res = mysqli_query($conn,
-    "SELECT student_id, name, reg_no, email, phone, blood_group, last_donation_date
-     FROM students ORDER BY name ASC");
+    "SELECT donor_id, name, donor_code, email, phone, blood_group, last_donation_date
+     FROM donors ORDER BY name ASC");
 if ($res) { while ($r = mysqli_fetch_assoc($res)) { $donors[] = $r; } }
 
 $backLink = ($_SESSION['role'] === 'admin') ? 'dashboard.php' : 'officer_dashboard.php';
@@ -57,7 +57,7 @@ include 'inc/header.php';
                         <tr style="border-bottom:1px solid #f0f0f0;">
                             <td style="padding:10px;"><?= $i++ ?></td>
                             <td style="padding:10px;"><?= htmlspecialchars($d['name']) ?></td>
-                            <td style="padding:10px;"><?= htmlspecialchars($d['reg_no']) ?></td>
+                            <td style="padding:10px;"><?= htmlspecialchars($d['donor_code']) ?></td>
                             <td style="padding:10px;"><span class="badge-pill" style="background:#fdeaea;color:#7a0000;"><?= htmlspecialchars($d['blood_group'] ?? 'N/A') ?></span></td>
                             <td style="padding:10px; color:#6c757d; font-size:.9rem;"><?= $d['last_donation_date'] ? htmlspecialchars($d['last_donation_date']) : 'Never' ?></td>
                             <td style="padding:10px;">

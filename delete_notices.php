@@ -1,8 +1,8 @@
 <?php
 require_once 'config/db.php';
 
-// Allow both admin and supervisor roles
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervisor'])) {
+// Allow both admin and officer roles
+if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'officer'])) {
     header("Location: login.php");
     exit;
 }
@@ -22,8 +22,8 @@ if (isset($_GET['id'])) {
             exit;
         } else {
             // Officer can only delete their own alert
-            $supervisor_id = isset($_SESSION['supervisor_id']) ? intval($_SESSION['supervisor_id']) : 0;
-            if ($notice['supervisor_id'] == $supervisor_id) {
+            $officer_id = isset($_SESSION['officer_id']) ? intval($_SESSION['officer_id']) : 0;
+            if ($notice['officer_id'] == $officer_id) {
                 $dbb->delete_notice($notice_id);
                 header("Location: notices.php");
                 exit;

@@ -4,12 +4,12 @@ include 'config/db.php';
 bl_require_role('admin');   // BL-25: this handed the full donor table to any anonymous visitor.
 
 header("Content-Type: application/vnd.ms-excel");
-header("Content-Disposition: attachment; filename=students_list.xls");
+header("Content-Disposition: attachment; filename=donors_list.xls");
 header("Pragma: no-cache");
 header("Expires: 0");
 
 $dbb = new operations();
-$students = $dbb->get_students();
+$donors = $dbb->get_donors();
 
 // Define 5 random venues
 $venues = ["Sambisa", "HND 2 A", "TestFund Building", "Software Lab", "ND 2 B"];
@@ -25,16 +25,16 @@ echo "<tr>
       </tr>";
 
 $counter = 1;
-foreach ($students as $student) {
+foreach ($donors as $donor) {
     // Random venue
     $venue = $venues[array_rand($venues)];
 
-    // Level (you already store it in `year_of_study`)
-    $level = $student['year_of_study'];
+    // Blood group
+    $level = $donor['blood_group'];
 
     echo "<tr>
             <td>{$counter}</td>
-            <td>{$student['name']}</td>
+            <td>{$donor['name']}</td>
             <td>{$level}</td>
             <td>{$venue}</td>
             <td>{$date}</td>
