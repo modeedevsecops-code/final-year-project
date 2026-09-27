@@ -13,11 +13,13 @@
 --    mysql -u root donor_app < db/schema.sql
 --    mysql -u root donor_app < db/seed.sql
 --
+--  A member is one unified account (donor + recipient). Members log in with
+--  email + password; every member is also a searchable donor.
+--
 --  CREDENTIALS
---    Admin      login.php        admin / admin
---    Officers   user-login.php   <email> / Officer@123
---    Donors     user-login.php   <donor_code> / Donor@123
---    Recipients user-login.php   <email>  / Recipient@123
+--    Admin     login.php        admin / admin
+--    Officers  user-login.php   <email> / Officer@123
+--    Members   user-login.php   <email> / Member@123
 -- ============================================================================
 
 SET NAMES utf8mb4;
@@ -27,8 +29,7 @@ TRUNCATE TABLE `blood_stock`;
 TRUNCATE TABLE `donations`;
 TRUNCATE TABLE `notices`;
 TRUNCATE TABLE `blood_requests`;
-TRUNCATE TABLE `recipients`;
-TRUNCATE TABLE `donors`;
+TRUNCATE TABLE `members`;
 TRUNCATE TABLE `hospital_workers`;
 TRUNCATE TABLE `blood_banks`;
 TRUNCATE TABLE `login`;
@@ -53,37 +54,37 @@ INSERT INTO `hospital_workers` (`worker_id`, `name`, `phone`, `email`, `position
 (1, 'Maryam Ibrahim', '08127494994', 'maryam@bloodlink.test', 'Blood Bank Officer', 1, '$2y$12$5SPz3nCmiahAt0ovpXc6OeybV163.l07y9fypcMdKX7Fk.vltpLHC'),
 (2, 'Samuel Adeyemi', '08031122334', 'samuel@bloodlink.test', 'Blood Bank Officer', 4, '$2y$12$5SPz3nCmiahAt0ovpXc6OeybV163.l07y9fypcMdKX7Fk.vltpLHC');
 
--- ----------------------------------------------------------------- donors --
-INSERT INTO `donors`
-  (`donor_id`,`name`,`email`,`phone`,`donor_code`,`blood_group`,`last_donation_date`,`address`,`latitude`,`longitude`,`password`) VALUES
+-- ---------------------------------------------------------------- members --
+-- Unified accounts (donor + recipient). Members 1-9 are seeded as active
+-- donors spread across the 56-day boundary; members 10-12 are seeded as the
+-- people who file the demo requests — but each is equally a searchable donor.
+-- All log in with their email + Member@123.
+INSERT INTO `members`
+  (`member_id`,`name`,`email`,`phone`,`member_code`,`blood_group`,`last_donation_date`,`address`,`latitude`,`longitude`,`password`) VALUES
 (1, 'Zainab Auwal',     'zainab@bloodlink.test',  '08023456701', 'BL-KD-001', 'O-',  NULL,
-    'Ahmadu Bello Way, Kaduna',            10.5222000,  7.4383000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Ahmadu Bello Way, Kaduna',            10.5222000,  7.4383000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (2, 'Kamalu Yahaya',    'kamalu@bloodlink.test',  '08023456702', 'BL-KD-002', 'O+',  NULL,
-    'Kawo, Kaduna',                        10.5560000,  7.4270000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Kawo, Kaduna',                        10.5560000,  7.4270000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (3, 'Aliyu Abubakar',   'aliyu@bloodlink.test',   '08023456703', 'BL-KD-003', 'A+',  DATE_SUB(CURDATE(), INTERVAL 30 DAY),
-    'Barnawa, Kaduna',                     10.4736000,  7.4165000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Barnawa, Kaduna',                     10.4736000,  7.4165000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (4, 'Fatima Sani',      'fatima@bloodlink.test',  '08023456704', 'BL-KD-004', 'A-',  DATE_SUB(CURDATE(), INTERVAL 56 DAY),
-    'Malali, Kaduna',                      10.5480000,  7.4400000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Malali, Kaduna',                      10.5480000,  7.4400000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (5, 'Ibrahim Musa',     'ibrahim@bloodlink.test', '08023456705', 'BL-KD-005', 'B+',  DATE_SUB(CURDATE(), INTERVAL 55 DAY),
-    'Ungwan Rimi, Kaduna',                 10.5333000,  7.4500000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Ungwan Rimi, Kaduna',                 10.5333000,  7.4500000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (6, 'Hauwa Garba',      'hauwa@bloodlink.test',   '08023456706', 'BL-KD-006', 'B-',  DATE_SUB(CURDATE(), INTERVAL 200 DAY),
-    'Tudun Wada, Kaduna',                  10.5090000,  7.4200000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Tudun Wada, Kaduna',                  10.5090000,  7.4200000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (7, 'Yusuf Danladi',    'yusuf@bloodlink.test',   '08023456707', 'BL-KN-007', 'AB+', DATE_SUB(CURDATE(), INTERVAL 120 DAY),
-    'Zaria Road, Kano',                    11.9964000,  8.5200000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Zaria Road, Kano',                    11.9964000,  8.5200000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (8, 'Amina Bello',      'amina@bloodlink.test',   '08023456708', 'BL-KN-008', 'AB-', NULL,
-    'Kano City Centre, Kano',              12.0022000,  8.5920000, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u'),
+    'Kano City Centre, Kano',              12.0022000,  8.5920000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
 (9, 'Grace Okonkwo',    'grace@bloodlink.test',   '08023456709', 'BL-KD-009', 'O+',  NULL,
-    NULL, NULL, NULL, '$2y$12$YQHGMXIcbFpUJaeKpeW6p.V8lIlU.4zdS8ZjPx0j0JyCH6dw9FY3u');
-
--- ------------------------------------------------------------- recipients --
-INSERT INTO `recipients`
-  (`recipient_id`,`name`,`email`,`phone`,`address`,`blood_group`,`latitude`,`longitude`,`password`) VALUES
-(1, 'Hassan Umar',    'hassan@bloodlink.test',  '08051112201', 'Barau Dikko Teaching Hospital, Kaduna', 'O-',
-    10.5105000, 7.4165000, '$2y$12$evuR8xaawLq2FXYrNI4tWulKnxxLbD/dKP6q.e84A/GXHM0mLEhgG'),
-(2, 'Blessing Eze',   'blessing@bloodlink.test','08051112202', 'ABU Teaching Hospital, Zaria',          'AB+',
-    11.1113000, 7.7227000, '$2y$12$evuR8xaawLq2FXYrNI4tWulKnxxLbD/dKP6q.e84A/GXHM0mLEhgG'),
-(3, 'Musa Lawal',     'musa@bloodlink.test',    '08051112203', 'Aminu Kano Teaching Hospital, Kano',    'B+',
-    11.9800000, 8.5300000, '$2y$12$evuR8xaawLq2FXYrNI4tWulKnxxLbD/dKP6q.e84A/GXHM0mLEhgG');
+    NULL, NULL, NULL, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
+(10,'Hassan Umar',      'hassan@bloodlink.test',  '08051112201', 'BL-KD-010', 'O-',  NULL,
+    'Barau Dikko Teaching Hospital, Kaduna', 10.5105000, 7.4165000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
+(11,'Blessing Eze',     'blessing@bloodlink.test','08051112202', 'BL-ZR-011', 'AB+', NULL,
+    'ABU Teaching Hospital, Zaria',          11.1113000, 7.7227000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He'),
+(12,'Musa Lawal',       'musa@bloodlink.test',    '08051112203', 'BL-KN-012', 'B+',  NULL,
+    'Aminu Kano Teaching Hospital, Kano',    11.9800000, 8.5300000, '$2y$12$t2BtcLkDQ735ZZOVdvLT2uU3LZ78uX9CMagcOyUV0Kk3v3vbiu/He');
 
 -- ---------------------------------------------------------- blood_stock ----
 -- Per bank per type. Bank 1 (Barau Dikko) has A- and O- BELOW threshold so two
@@ -107,10 +108,10 @@ INSERT INTO `stock_alerts` (`blood_bank_id`,`blood_type`,`units_at_alert`,`thres
 -- -------------------------------------------------------- blood_requests --
 INSERT INTO `blood_requests`
   (`request_id`,`recipient_id`,`patient_name`,`blood_group`,`units_needed`,`hospital_name`,`location`,`latitude`,`longitude`,`urgency_level`,`status`,`requested_by`,`contact_phone`) VALUES
-(1, 1, 'Hassan Umar',  'O-',  2, 'Barau Dikko Teaching Hospital',       'Kaduna',      10.5105000, 7.4165000, 'Critical Emergency', 'Pending',  'Hassan Umar',  '08051112201'),
-(2, 2, 'Blessing Eze', 'AB+', 1, 'ABU Teaching Hospital',               'Zaria',       11.1113000, 7.7227000, 'Urgent',             'Pending',  'Blessing Eze', '08051112202'),
-(3, 3, 'Musa Lawal',   'B+',  3, 'Aminu Kano Teaching Hospital',        'Kano',        11.9800000, 8.5300000, 'Normal',             'Approved', 'Musa Lawal',   '08051112203'),
-(4, 1, 'Hassan Umar',  'A+',  1, 'Barau Dikko Teaching Hospital',       'Kaduna',      10.5105000, 7.4165000, 'Normal',             'Fulfilled','Hassan Umar',  '08051112201');
+(1, 10, 'Hassan Umar',  'O-',  2, 'Barau Dikko Teaching Hospital',       'Kaduna',      10.5105000, 7.4165000, 'Critical Emergency', 'Pending',  'Hassan Umar',  '08051112201'),
+(2, 11, 'Blessing Eze', 'AB+', 1, 'ABU Teaching Hospital',               'Zaria',       11.1113000, 7.7227000, 'Urgent',             'Pending',  'Blessing Eze', '08051112202'),
+(3, 12, 'Musa Lawal',   'B+',  3, 'Aminu Kano Teaching Hospital',        'Kano',        11.9800000, 8.5300000, 'Normal',             'Approved', 'Musa Lawal',   '08051112203'),
+(4, 10, 'Hassan Umar',  'A+',  1, 'Barau Dikko Teaching Hospital',       'Kaduna',      10.5105000, 7.4165000, 'Normal',             'Fulfilled','Hassan Umar',  '08051112201');
 
 -- ----------------------------------------------------------- notices -------
 INSERT INTO `notices` (`officer_id`,`title`,`message`) VALUES
@@ -118,9 +119,9 @@ INSERT INTO `notices` (`officer_id`,`title`,`message`) VALUES
 (NULL, 'Emergency: O- blood needed at Barau Dikko Teaching Hospital',
        '2 unit(s) of O- needed urgently for patient Hassan Umar at Barau Dikko Teaching Hospital (Kaduna). Contact: 08051112201.');
 
--- ---- Donor availability (defaults: available=1 / anytime / both) ----
-UPDATE donors SET is_available = 0 WHERE donor_id IN (5, 8);            -- a couple unavailable for demo
-UPDATE donors SET availability_schedule='emergencies', contact_preference='phone' WHERE donor_id = 1;
+-- ---- Member (donor) availability (defaults: available=1 / anytime / both) ----
+UPDATE members SET is_available = 0 WHERE member_id IN (5, 8);            -- a couple unavailable for demo
+UPDATE members SET availability_schedule='emergencies', contact_preference='phone' WHERE member_id = 1;
 
 -- ---- Emergency severity + priority on seeded requests ----
 UPDATE blood_requests SET severity='critical', required_within_hours=3,  priority_score=95 WHERE request_id = 1;

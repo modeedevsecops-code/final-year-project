@@ -6,7 +6,7 @@ require_once 'config/db.php';
 require_once 'inc/header.php';
 
 // Donors only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
     header("Location: login.php");
     exit;
 }

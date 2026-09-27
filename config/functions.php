@@ -45,30 +45,35 @@ class operations extends dbconfig{
 // In your operations class
 // Inserting Record into the Database
 
-// In your operations class
+// Admin adds a member (a unified donor+recipient account).
 public function add_donor() {
     global $db;
 
-    if (isset($_POST['btn_add_donor'])) {
+    if (isset($_POST['btn_add_donor']) || isset($_POST['btn_add_member'])) {
         $name = $db->check($_POST['name']);
         $email = $db->check($_POST['email']);
         $phone = $db->check($_POST['phone']);
-        $department = $db->check($_POST['donor_code']);
+        $member_code = $db->check($_POST['member_code'] ?? ($_POST['donor_code'] ?? ''));
         $password = $db->check($_POST['password']);
         $blood_group = $db->check($_POST['blood_group'] ?? '');
-        $address = $db->check($_POST['donor_address'] ?? ($_POST['address'] ?? ''));
+        $address = $db->check($_POST['member_address'] ?? ($_POST['donor_address'] ?? ($_POST['address'] ?? '')));
+
+        // Auto-generate a member code if the admin left it blank.
+        if ($member_code === '') {
+            $member_code = 'BL-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+        }
 
         // Validate required fields
-        if (!empty($name) && !empty($email) && !empty($phone) && !empty($department) && !empty($blood_group) && !empty($address)) {
-            if ($this->insert_donor($name, $email, $phone, $department, $blood_group, $password, $address)) {
-                $this->set_message('<div class="alert alert-success text-center"> Donor Added Successfully</div>');
+        if (!empty($name) && !empty($email) && !empty($phone) && !empty($blood_group) && !empty($address)) {
+            if ($this->insert_donor($name, $email, $phone, $member_code, $blood_group, $password, $address)) {
+                $this->set_message('<div class="alert alert-success text-center"> Member Added Successfully</div>');
                 ?>
                 <script>
-                    setTimeout(() => window.location.href = "", 2000);
+                    setTimeout(() => window.location.href = "manage_members.php", 1500);
                 </script>
                 <?php
             } else {
-                $this->set_message('<div class="alert alert-danger"> Failed to Add Donor! </div>');
+                $this->set_message('<div class="alert alert-danger"> Failed to Add Member! </div>');
             }
         } else {
             $this->set_message('<div class="alert alert-danger"> Please fill in all fields! </div>');
@@ -76,9 +81,9 @@ public function add_donor() {
     }
 }
 
-// Inserts a donor. Writes the blood group to blood_group, geocodes the address
-// via Nominatim, and hashes the password at creation.
-function insert_donor($name, $email, $phone, $department, $blood_group, $password, $address) {
+// Inserts a member. Writes the blood group, geocodes the address via Nominatim,
+// and hashes the password at creation.
+function insert_donor($name, $email, $phone, $member_code, $blood_group, $password, $address) {
     global $db;
 
     list($latitude, $longitude) = bl_geocode($address);
@@ -87,8 +92,8 @@ function insert_donor($name, $email, $phone, $department, $blood_group, $passwor
 
     $password_hash = password_hash($password, PASSWORD_DEFAULT);
 
-    $query = "INSERT INTO donors (name, email, phone, donor_code, blood_group, password, address, latitude, longitude)
-              VALUES ('$name', '$email', '$phone', '$department', '$blood_group', '$password_hash', '$address', $lat_val, $lng_val)";
+    $query = "INSERT INTO members (name, email, phone, member_code, blood_group, password, address, latitude, longitude)
+              VALUES ('$name', '$email', '$phone', '$member_code', '$blood_group', '$password_hash', '$address', $lat_val, $lng_val)";
     $result = mysqli_query($db->connection, $query);
 
     if ($result) {
@@ -98,16 +103,16 @@ function insert_donor($name, $email, $phone, $department, $blood_group, $passwor
     }
 }
 
-// Donor updates their own availability (toggle + schedule + contact preference).
-public function update_donor_availability($donor_id) {
+// Member updates their own availability (toggle + schedule + contact preference).
+public function update_donor_availability($member_id) {
     global $db;
     if (!isset($_POST['btn_update_availability'])) return;
     bl_csrf_check();
-    $donor_id  = intval($donor_id);
+    $member_id = intval($member_id);
     $available = isset($_POST['is_available']) ? 1 : 0;
     $schedule  = $db->check($_POST['availability_schedule'] ?? 'anytime');
     $contact   = $db->check($_POST['contact_preference'] ?? 'both');
-    $q = "UPDATE donors SET is_available=$available, availability_schedule='$schedule', contact_preference='$contact' WHERE donor_id=$donor_id";
+    $q = "UPDATE members SET is_available=$available, availability_schedule='$schedule', contact_preference='$contact' WHERE member_id=$member_id";
     if (mysqli_query($db->connection, $q)) {
         $this->set_message('<div class="alert alert-success text-center">Availability updated.</div>');
     } else {
@@ -137,9 +142,9 @@ public function search_donors($blood_group, $mode = 'compatible', $available_onl
                  + SIN(RADIANS($olat))*SIN(RADIANS(latitude)))),1) END AS distance_km";
     }
     $avail = $available_only ? "AND is_available = 1" : "";
-    $q = "SELECT donor_id, name, email, phone, blood_group, last_donation_date, is_available,
+    $q = "SELECT member_id AS donor_id, name, email, phone, blood_group, last_donation_date, is_available,
                  availability_schedule, contact_preference, latitude, longitude, $dist
-          FROM donors WHERE blood_group IN ($in) $avail";
+          FROM members WHERE blood_group IN ($in) $avail";
     $res = mysqli_query($db->connection, $q);
     $rows = $res ? mysqli_fetch_all($res, MYSQLI_ASSOC) : [];
     foreach ($rows as &$r) {
@@ -156,92 +161,9 @@ public function search_donors($blood_group, $mode = 'compatible', $available_onl
     return $rows;
 }
 
-// Admin creates a recipient account. Was referenced by add_recipient.php but
-// never implemented (fatal for admins). Password hashed, address geocoded.
-public function add_recipient() {
-    global $db;
-    if (!isset($_POST['btn_add_recipient'])) return;
-
-    bl_csrf_check(); // BL-14
-
-    $name        = $db->check(trim($_POST['name'] ?? ''));
-    $email       = $db->check(trim($_POST['email'] ?? ''));
-    $phone       = $db->check(trim($_POST['phone'] ?? ''));
-    $blood_group = $db->check(trim($_POST['blood_group'] ?? ''));
-    $address_raw = trim($_POST['address'] ?? '');
-    $address     = $db->check($address_raw);
-    $password    = trim($_POST['password'] ?? '');
-
-    if ($name === '' || $email === '' || $phone === '' || $password === '') {
-        $this->set_message('<div class="alert alert-danger">Please fill in name, email, phone and password.</div>');
-        return;
-    }
-
-    // Duplicate email guard (prepared).
-    if ($stmt = mysqli_prepare($db->connection, "SELECT recipient_id FROM recipients WHERE email = ? LIMIT 1")) {
-        mysqli_stmt_bind_param($stmt, "s", $email);
-        mysqli_stmt_execute($stmt);
-        mysqli_stmt_store_result($stmt);
-        $dup = mysqli_stmt_num_rows($stmt) > 0;
-        mysqli_stmt_close($stmt);
-        if ($dup) {
-            $this->set_message('<div class="alert alert-danger">That email is already registered.</div>');
-            return;
-        }
-    }
-
-    list($lat, $lng) = bl_geocode($address_raw);
-    $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'NULL';
-    $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'NULL';
-    $hash = password_hash($password, PASSWORD_DEFAULT);
-
-    $query = "INSERT INTO recipients (name, email, phone, address, blood_group, latitude, longitude, password)
-              VALUES ('$name', '$email', '$phone', '$address', '$blood_group', $lat_sql, $lng_sql, '$hash')";
-    if (mysqli_query($db->connection, $query)) {
-        $this->set_message('<div class="alert alert-success text-center">Recipient added successfully.</div>');
-        echo '<script>setTimeout(() => window.location.href = "manage_recipients.php", 1500);</script>';
-    } else {
-        $this->set_message('<div class="alert alert-danger">Failed to add recipient.</div>');
-    }
-}
-
-// Fetch a single recipient (admin edit).
-public function get_recipient_by_id($id) {
-    global $db;
-    $id = intval($id);
-    $res = mysqli_query($db->connection, "SELECT * FROM recipients WHERE recipient_id = $id LIMIT 1");
-    return $res ? mysqli_fetch_assoc($res) : null;
-}
-
-// Admin updates a recipient (password left unchanged here).
-public function update_recipient($id) {
-    global $db;
-    if (!isset($_POST['btn_update_recipient'])) return;
-    bl_csrf_check(); // BL-14
-
-    $id          = intval($id);
-    $name        = $db->check(trim($_POST['name'] ?? ''));
-    $email       = $db->check(trim($_POST['email'] ?? ''));
-    $phone       = $db->check(trim($_POST['phone'] ?? ''));
-    $blood_group = $db->check(trim($_POST['blood_group'] ?? ''));
-    $address_raw = trim($_POST['address'] ?? '');
-    $address     = $db->check($address_raw);
-
-    list($lat, $lng) = bl_geocode($address_raw);
-    $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'latitude';
-    $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'longitude';
-
-    $query = "UPDATE recipients
-              SET name='$name', email='$email', phone='$phone', address='$address',
-                  blood_group='$blood_group', latitude=$lat_sql, longitude=$lng_sql
-              WHERE recipient_id=$id";
-    if (mysqli_query($db->connection, $query)) {
-        $this->set_message('<div class="alert alert-success text-center">Recipient updated.</div>');
-        echo '<script>setTimeout(() => window.location.href = "manage_recipients.php", 1500);</script>';
-    } else {
-        $this->set_message('<div class="alert alert-danger">Failed to update recipient.</div>');
-    }
-}
+// (Recipient CRUD removed — recipients are now members; admin manages them
+//  through the unified Manage Members page: add_donor / get_donor_by_id /
+//  update_donor / delete_donor / get_donors, all backed by the members table.)
 
 // Verify a plaintext password against a stored value, transparently upgrading
 // legacy plaintext rows to a bcrypt hash on the first successful login.
@@ -273,34 +195,37 @@ public function user_login() {
 
     $role = $_POST['role'] ?? '';
 
-    if ($role == 'donor') {
-      // Donor login by donor_code + password (prepared statement — BL-13)
-      $donor_code   = trim($_POST['donor_code'] ?? '');
-      $password = $_POST['donor_password'] ?? '';
+    if ($role == 'member') {
+      // Member login by email (or member_code) + password (prepared — BL-13).
+      // A member is one unified account: donor + recipient.
+      $login    = trim($_POST['member_login'] ?? '');
+      $password = $_POST['member_password'] ?? '';
 
       $user = null;
-      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM donors WHERE donor_code = ? LIMIT 1")) {
-        mysqli_stmt_bind_param($stmt, "s", $donor_code);
+      if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM members WHERE email = ? OR member_code = ? LIMIT 1")) {
+        mysqli_stmt_bind_param($stmt, "ss", $login, $login);
         mysqli_stmt_execute($stmt);
         $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
         mysqli_stmt_close($stmt);
       }
 
-      if ($user && $this->verify_password($password, $user['password'], 'donors', 'donor_id', $user['donor_id'])) {
+      if ($user && $this->verify_password($password, $user['password'], 'members', 'member_id', $user['member_id'])) {
         $_SESSION['Active'] = 'Active';
-        $_SESSION['role'] = 'donor';
-        $_SESSION['user_id'] = $user['donor_id'];
+        $_SESSION['role'] = 'member';
+        $_SESSION['user_id'] = $user['member_id'];
+        $_SESSION['member_id'] = $user['member_id'];
         $_SESSION['name'] = $user['name'];
-        $_SESSION['donor_code'] = $user['donor_code'];
+        $_SESSION['member_code'] = $user['member_code'];
+        $_SESSION['email'] = $user['email'];
 
         $this->set_message('<div class="alert alert-success text-center">Login Successful!</div>');
 ?>
         <script>
-          setTimeout(() => window.location.href = "donor_dashboard.php", 1500);
+          setTimeout(() => window.location.href = "member_dashboard.php", 1500);
         </script>
 <?php
       } else {
-        $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid Donor ID or password!</div>');
+        $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid email/member ID or password!</div>');
 ?>
         <script>
           setTimeout(() => document.getElementById('msg').style.display = "none", 2000);
@@ -308,43 +233,6 @@ public function user_login() {
 <?php
       }
     }
-
-    elseif ($role == 'recipient') {
-            // Recipient login by email or id + password (prepared statement — BL-13)
-            $login    = trim($_POST['recipient_email'] ?? '');
-            $password = $_POST['recipient_password'] ?? '';
-
-            $user = null;
-            if ($stmt = mysqli_prepare($this->connection, "SELECT * FROM recipients WHERE email = ? OR recipient_id = ? LIMIT 1")) {
-                $login_id = intval($login);
-                mysqli_stmt_bind_param($stmt, "si", $login, $login_id);
-                mysqli_stmt_execute($stmt);
-                $user = mysqli_fetch_assoc(mysqli_stmt_get_result($stmt));
-                mysqli_stmt_close($stmt);
-            }
-
-            if ($user && $this->verify_password($password, $user['password'], 'recipients', 'recipient_id', $user['recipient_id'])) {
-                    $_SESSION['Active'] = 'Active';
-                    $_SESSION['role'] = 'recipient';
-                    $_SESSION['user_id'] = $user['recipient_id'];
-                    $_SESSION['recipient_id'] = $user['recipient_id'];
-                    $_SESSION['name'] = $user['name'];
-
-                    $this->set_message('<div class="alert alert-success text-center">Login Successful!</div>');
-                    ?>
-                    <script>
-                    setTimeout(() => window.location.href = "recipient_dashboard.php", 1500);
-                    </script>
-                    <?php
-            } else {
-                    $this->set_message('<div class="alert alert-danger text-center" id="msg">Invalid email or password</div>');
-                    ?>
-                    <script>
-                    setTimeout(() => document.getElementById('msg').style.display = "none", 2000);
-                    </script>
-                    <?php
-            }
-        }
 
     elseif ($role == 'officer') {
       // Officer login by email + password (prepared statement — BL-13)
@@ -536,14 +424,14 @@ public function user_login() {
 public function delete_donor() {
     global $db;
 
-    if (isset($_POST['btn_delete_donor'])) {
-        $donor_id = $_POST['donor_id'];
+    if (isset($_POST['btn_delete_donor']) || isset($_POST['btn_delete_member'])) {
+        $member_id = intval($_POST['member_id'] ?? ($_POST['donor_id'] ?? 0));
 
-        $query = "DELETE FROM donors WHERE donor_id='$donor_id'";
+        $query = "DELETE FROM members WHERE member_id='$member_id'";
         if (mysqli_query($db->connection, $query)) {
-            $this->set_message('<div class="alert alert-success">Donor deleted successfully.</div>');
+            $this->set_message('<div class="alert alert-success">Member deleted successfully.</div>');
         } else {
-            $this->set_message('<div class="alert alert-danger">Failed to delete donor.</div>');
+            $this->set_message('<div class="alert alert-danger">Failed to delete member.</div>');
         }
     }
 }
@@ -637,33 +525,47 @@ public function delete_donor() {
 
     }
 
-    // Fetch donor details by ID
-public function get_donor_by_id($donor_id) {
+    // Fetch member details by ID
+public function get_donor_by_id($member_id) {
     global $db;
-    $query = "SELECT * FROM donors WHERE donor_id = '$donor_id'";
+    $member_id = intval($member_id);
+    $query = "SELECT * FROM members WHERE member_id = '$member_id'";
     $result = mysqli_query($db->connection, $query);
     return mysqli_fetch_assoc($result);
 }
 
-// Update donor details
-public function update_donor($donor_id) {
+// Update a member (admin edit). Re-geocodes when the address changes.
+public function update_donor($member_id) {
     global $db;
 
-    if (isset($_POST['btn_update_donor'])) {
-        $name = $db->check($_POST['name']);
-        $email = $db->check($_POST['email']);
-        $phone = $db->check($_POST['phone']);
-        $department = $db->check($_POST['department'] ?? ($_POST['donor_code'] ?? ''));
+    if (isset($_POST['btn_update_donor']) || isset($_POST['btn_update_member'])) {
+        $member_id   = intval($member_id);
+        $name        = $db->check($_POST['name']);
+        $email       = $db->check($_POST['email']);
+        $phone       = $db->check($_POST['phone']);
+        $member_code = $db->check($_POST['member_code'] ?? ($_POST['department'] ?? ($_POST['donor_code'] ?? '')));
         $blood_group = $db->check($_POST['blood_group'] ?? '');
+        $address_raw = trim($_POST['address'] ?? '');
+        $address     = $db->check($address_raw);
 
-        $query = "UPDATE donors SET name='$name', email='$email', phone='$phone', donor_code='$department', blood_group='$blood_group' WHERE donor_id='$donor_id'";
+        // Re-geocode only when an address was supplied; otherwise keep existing coords.
+        if ($address_raw !== '') {
+            list($lat, $lng) = bl_geocode($address_raw);
+            $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'latitude';
+            $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'longitude';
+            $addr_sql = ", address='$address', latitude=$lat_sql, longitude=$lng_sql";
+        } else {
+            $addr_sql = '';
+        }
+
+        $query = "UPDATE members SET name='$name', email='$email', phone='$phone', member_code='$member_code', blood_group='$blood_group'$addr_sql WHERE member_id='$member_id'";
         $result = mysqli_query($db->connection, $query);
 
         if ($result) {
-             $this->set_message('<div class="alert alert-success text-center">Donor Updated Successfully</div>');
-             echo '<script>setTimeout(() => window.location.href = "manage_donors.php", 2000);</script>';
+             $this->set_message('<div class="alert alert-success text-center">Member Updated Successfully</div>');
+             echo '<script>setTimeout(() => window.location.href = "manage_members.php", 1500);</script>';
         } else {
-            $this->set_message('<div class="alert alert-danger">Failed to Update Donor!</div>');
+            $this->set_message('<div class="alert alert-danger">Failed to Update Member!</div>');
         }
     }
 }
@@ -671,7 +573,7 @@ public function update_donor($donor_id) {
 
     public function get_donors() {
         global $db;
-        $query = "SELECT * FROM donors ORDER BY donor_id DESC"; // Adjust according to your table structure
+        $query = "SELECT * FROM members ORDER BY member_id DESC";
         $result = mysqli_query($db->connection, $query);
         return mysqli_fetch_all($result, MYSQLI_ASSOC);
     }
@@ -843,13 +745,13 @@ public function update_donor($donor_id) {
             $radius_clause = ($radius_km !== null && is_numeric($radius_km))
                 ? " AND $distance_expr <= " . (float)$radius_km : "";
             $query = "
-                SELECT donor_id, name, email, phone, blood_group, last_donation_date, is_available,
+                SELECT member_id AS donor_id, name, email, phone, blood_group, last_donation_date, is_available,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
                        CASE WHEN latitude IS NULL OR longitude IS NULL THEN NULL
                             ELSE ROUND($distance_expr, 1) END AS distance_km
-                FROM donors
+                FROM members
                 WHERE blood_group IN ($in_clause)
                   AND (last_donation_date IS NULL
                        OR DATEDIFF(CURDATE(), last_donation_date) >= " . self::DONATION_ELIGIBILITY_DAYS . ")
@@ -857,12 +759,12 @@ public function update_donor($donor_id) {
             ";
         } else {
             $query = "
-                SELECT donor_id, name, email, phone, blood_group, last_donation_date, is_available,
+                SELECT member_id AS donor_id, name, email, phone, blood_group, last_donation_date, is_available,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
                        NULL AS distance_km
-                FROM donors
+                FROM members
                 WHERE blood_group IN ($in_clause)
                 HAVING last_donation_date IS NULL
                        OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
@@ -905,7 +807,7 @@ public function update_donor($donor_id) {
         $units        = intval($units);
 
         // Re-check eligibility server-side (never trust the form alone)
-        $check = mysqli_query($db->connection, "SELECT last_donation_date FROM donors WHERE donor_id = '$donor_id'");
+        $check = mysqli_query($db->connection, "SELECT last_donation_date FROM members WHERE member_id = '$donor_id'");
         $donor_row = $check ? mysqli_fetch_assoc($check) : null;
 
         if (!$donor_row) {
@@ -943,7 +845,7 @@ public function update_donor($donor_id) {
             $donation_id = mysqli_insert_id($db->connection);
 
             // 2. Reset donor's 56-day clock
-            $query = "UPDATE donors SET last_donation_date = '$today' WHERE donor_id = '$donor_id'";
+            $query = "UPDATE members SET last_donation_date = '$today' WHERE member_id = '$donor_id'";
             if (!mysqli_query($db->connection, $query)) throw new Exception(mysqli_error($db->connection));
 
             // 3. Add donated units to THIS BANK's stock (create the row if missing).
@@ -994,7 +896,7 @@ public function update_donor($donor_id) {
                    r.recipient_id, r.name AS recipient_name,
                    br.patient_name, br.hospital_name
             FROM donations d
-            LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
+            LEFT JOIN members r ON r.member_id = d.recipient_id
             LEFT JOIN blood_requests br ON br.request_id = d.request_id
             WHERE d.donor_id = '$donor_id'
             ORDER BY d.donation_date DESC
@@ -1086,10 +988,10 @@ public function update_donor($donor_id) {
         $recipient_id = intval($recipient_id);
         $query = "
             SELECT d.donation_id, d.blood_group, d.units, d.donation_date, d.status,
-                   s.donor_id AS donor_id, s.name AS donor_name,
+                   s.member_id AS donor_id, s.name AS donor_name,
                    br.patient_name, br.hospital_name
             FROM donations d
-            LEFT JOIN donors s ON s.donor_id = d.donor_id
+            LEFT JOIN members s ON s.member_id = d.donor_id
             LEFT JOIN blood_requests br ON br.request_id = d.request_id
             WHERE d.recipient_id = '$recipient_id'
             ORDER BY d.donation_date DESC

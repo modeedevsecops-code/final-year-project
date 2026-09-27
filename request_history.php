@@ -4,9 +4,9 @@
 // page was never written (BL-16). Built in Phase 1 on the real blood_requests
 // data, guarded to recipients only.
 require_once 'config/db.php';
-bl_require_role('recipient');
+bl_require_role('member');
 
-$recipientId = intval($_SESSION['recipient_id'] ?? $_SESSION['user_id'] ?? 0);
+$recipientId = intval($_SESSION['member_id'] ?? $_SESSION['user_id'] ?? 0);
 $conn = $db->connection;
 
 // This recipient's own requests, newest first (prepared — no interpolation).
@@ -129,7 +129,7 @@ $urgencyStyle = [
 
             <div style="margin-top:24px;">
                 <a href="request_blood.php" class="btn btn-danger">New Request</a>
-                <a href="recipient_dashboard.php" class="btn btn-outline-secondary">Back to Dashboard</a>
+                <a href="member_dashboard.php" class="btn btn-outline-secondary">Back to Dashboard</a>
             </div>
 
         </div>

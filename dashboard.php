@@ -14,7 +14,7 @@ function safe_count($db, $sql) {
 }
 
 // --- Summary stats (using real table names from donor_app.sql) ---
-$total_donors     = safe_count($db, "SELECT COUNT(*) AS c FROM donors");
+$total_donors     = safe_count($db, "SELECT COUNT(*) AS c FROM members");
 $total_officers   = safe_count($db, "SELECT COUNT(*) AS c FROM hospital_workers");
 $pending_requests = safe_count($db, "SELECT COUNT(*) AS c FROM blood_requests WHERE status = 'Pending'");
 
@@ -53,9 +53,9 @@ include 'inc/navbar.php';
     <div class="row g-3 mb-4">
         <div class="col-md-3 col-sm-6">
             <div class="quick-card">
-                <div class="quick-icon"><i class="fas fa-tint"></i></div>
+                <div class="quick-icon"><i class="fas fa-users"></i></div>
                 <h3><?= $total_donors ?></h3>
-                <p>Total Donors</p>
+                <p>Total Members</p>
             </div>
         </div>
         <div class="col-md-3 col-sm-6">

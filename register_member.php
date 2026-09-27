@@ -3,36 +3,39 @@ include_once 'config/functions.php';
 $dbb = new operations();
 
 $msg = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_member'])) {
   bl_csrf_check();      // BL-14
   global $db;
   $conn = $db->connection;
 
-  $name = mysqli_real_escape_string($conn, trim($_POST['name']));
-  $email = mysqli_real_escape_string($conn, trim($_POST['email']));
-  $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
-  $donor_code = mysqli_real_escape_string($conn, trim($_POST['donor_code']));
+  $name        = mysqli_real_escape_string($conn, trim($_POST['name']));
+  $email       = mysqli_real_escape_string($conn, trim($_POST['email']));
+  $phone       = mysqli_real_escape_string($conn, trim($_POST['phone']));
   $blood_group = mysqli_real_escape_string($conn, trim($_POST['blood_group']));
   $address_raw = trim($_POST['address'] ?? '');
-  $address = mysqli_real_escape_string($conn, $address_raw);
-  $password = mysqli_real_escape_string($conn, trim($_POST['password']));
+  $address     = mysqli_real_escape_string($conn, $address_raw);
+  $password    = trim($_POST['password']);
 
-  // Check duplicate email
-  $dup = mysqli_query($conn, "SELECT donor_id FROM donors WHERE email='$email' LIMIT 1");
-  if (mysqli_num_rows($dup) > 0) {
+  // A member logs in by email, so the member_code is just a human-facing ID —
+  // auto-generate one if the person didn't choose it.
+  $member_code = mysqli_real_escape_string($conn, trim($_POST['member_code'] ?? ''));
+  if ($member_code === '') {
+    $member_code = 'BL-' . strtoupper(substr(bin2hex(random_bytes(3)), 0, 6));
+  }
+
+  $dup = mysqli_query($conn, "SELECT member_id FROM members WHERE email='$email' LIMIT 1");
+  if ($dup && mysqli_num_rows($dup) > 0) {
     $msg = '<div class="alert alert-danger text-center">Registration failed. Email is already registered!</div>';
   } else {
-    // The blood group belongs in blood_group. It used to be written into
-    // the legacy academic column, which is why donor matching (which reads blood_group)
-    // never found anybody. See db/schema.sql.
-    // Geocode the address once via Nominatim so the donor appears on the map (Phase 3).
+    // Geocode the address once via Nominatim so the member appears on the map.
     list($lat, $lng) = bl_geocode($address_raw);
     $lat_sql = ($lat !== null) ? "'" . floatval($lat) . "'" : 'NULL';
     $lng_sql = ($lng !== null) ? "'" . floatval($lng) . "'" : 'NULL';
-    $q = "INSERT INTO donors (name, email, phone, donor_code, blood_group, address, latitude, longitude, password)
-              VALUES ('$name', '$email', '$phone', '$donor_code', '$blood_group', '$address', $lat_sql, $lng_sql, '$password')";
+    $hash = password_hash($password, PASSWORD_DEFAULT);
+    $q = "INSERT INTO members (name, email, phone, member_code, blood_group, address, latitude, longitude, password)
+              VALUES ('$name', '$email', '$phone', '$member_code', '$blood_group', '$address', $lat_sql, $lng_sql, '$hash')";
     if (mysqli_query($conn, $q)) {
-      $msg = '<div class="alert alert-success text-center">Donor registration successful! You can now <a href="user-login.php">login</a>.</div>';
+      $msg = '<div class="alert alert-success text-center">Registration successful! Your Member ID is <strong>' . htmlspecialchars($member_code) . '</strong>. You can now <a href="user-login.php">login</a> with your email.</div>';
     } else {
       $msg = '<div class="alert alert-danger text-center">Registration error: ' . mysqli_error($conn) . '</div>';
     }
@@ -42,11 +45,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])
 
 <div class="card border-0 shadow-lg">
   <div class="card-header bg-danger text-white py-3">
-    <h4 class="mb-0 text-white text-center">🩸 Blood Donor Self-Registration</h4>
+    <h4 class="mb-0 text-white text-center">🩸 Member Registration</h4>
   </div>
   <div class="card-body p-4 bg-light">
     <p class="text-center text-muted mb-4">
-      Sign up today as a voluntary blood donor. Your coordinates will help match you to local emergency alerts.
+      One account to <strong>donate</strong> and <strong>request</strong> blood. Your coordinates help match you to nearby emergencies.
     </p>
 
     <?php echo $msg; ?>
@@ -60,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])
 
       <div class="row">
         <div class="col-md-6 mb-3">
-          <label class="form-label fw-bold">Email Address</label>
+          <label class="form-label fw-bold">Email Address <span class="text-muted fw-normal">(used to log in)</span></label>
           <input type="email" class="form-control" name="email" placeholder="aliyu@example.com" required>
         </div>
         <div class="col-md-6 mb-3">
@@ -85,8 +88,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])
           </select>
         </div>
         <div class="col-md-6 mb-3">
-          <label class="form-label fw-bold">Donor ID / Preferred Reg No</label>
-          <input type="text" class="form-control" name="donor_code" placeholder="e.g. BL-KD-099" required>
+          <label class="form-label fw-bold">Member ID <span class="text-muted fw-normal">(optional)</span></label>
+          <input type="text" class="form-control" name="member_code" placeholder="Auto-generated if left blank">
         </div>
       </div>
 
@@ -101,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_donor'])
           placeholder="Create a password for logging in" required>
       </div>
 
-      <button type="submit" name="btn_register_donor" class="btn btn-danger w-100 py-2 fw-bold">
+      <button type="submit" name="btn_register_member" class="btn btn-danger w-100 py-2 fw-bold">
         Submit Registration
       </button>
 

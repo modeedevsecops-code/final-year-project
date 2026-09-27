@@ -6,7 +6,7 @@ require_once 'config/db.php';
 require_once 'inc/header.php';
 
 // Recipients only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'recipient') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
     header("Location: login.php");
     exit;
 }
@@ -14,7 +14,7 @@ if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'recipient') {
 $db_conn = $db->connection;
 
 // Adjust this if your recipient id session key is different
-$recipientId = $_SESSION['recipient_id'] ?? $_SESSION['user_id'] ?? $_SESSION['id'] ?? null;
+$recipientId = $_SESSION['member_id'] ?? $_SESSION['user_id'] ?? null; // the member filing the request
 $recipientName = $_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Recipient';
 
 $errors = [];
@@ -248,7 +248,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <form method="POST" action="request_blood.php" id="rbForm" class="rb-actions">
                     <?php bl_csrf_field(); // BL-14 ?>
-                    <a href="recipient_dashboard.php" class="rb-btn rb-btn-ghost">Cancel</a>
+                    <a href="member_dashboard.php" class="rb-btn rb-btn-ghost">Cancel</a>
                     <button type="submit" class="rb-btn rb-btn-primary">Submit Request</button>
                 </form>
             </div>

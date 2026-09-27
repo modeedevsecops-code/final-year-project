@@ -13,8 +13,8 @@ $conn = $db->connection;
 
 $donors = [];
 $res = mysqli_query($conn,
-    "SELECT donor_id, name, donor_code, email, phone, blood_group, last_donation_date
-     FROM donors ORDER BY name ASC");
+    "SELECT member_id AS donor_id, name, member_code AS donor_code, email, phone, blood_group, last_donation_date
+     FROM members ORDER BY name ASC");
 if ($res) { while ($r = mysqli_fetch_assoc($res)) { $donors[] = $r; } }
 
 $backLink = ($_SESSION['role'] === 'admin') ? 'dashboard.php' : 'officer_dashboard.php';

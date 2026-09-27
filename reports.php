@@ -30,15 +30,15 @@ if ($export === 'donations_csv') {
     $out = fopen('php://output', 'w');
     fputcsv($out, ['#', 'Donation Date', 'Donor Name', 'Donor ID', 'Blood Group', 'Hospital Officer', 'Hospital / Recipient', 'Units', 'Status', 'Recorded At']);
 
-    $q = "SELECT d.donation_date, s.name AS donor_name, s.donor_code AS donor_id, d.blood_group,
+    $q = "SELECT d.donation_date, s.name AS donor_name, s.member_code AS donor_id, d.blood_group,
                  st.name AS officer_name,
                  COALESCE(br.hospital_name, r.name) AS hospital,
                  d.units, d.status, d.created_at
           FROM donations d
-          LEFT JOIN donors s  ON s.donor_id = d.donor_id
+          LEFT JOIN members s  ON s.member_id = d.donor_id
           LEFT JOIN hospital_workers    st ON st.worker_id  = d.officer_id
           LEFT JOIN blood_requests br ON br.request_id = d.request_id
-          LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
+          LEFT JOIN members r ON r.member_id = d.recipient_id
           WHERE 1=1";
     if ($df)
         $q .= " AND d.donation_date >= '$df'";
@@ -70,7 +70,7 @@ function safe_count($conn, $sql)
     return intval($row['cnt'] ?? 0);
 }
 
-$total_donors = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donors");
+$total_donors = safe_count($conn, "SELECT COUNT(*) AS cnt FROM members");
 $total_officers = safe_count($conn, "SELECT COUNT(*) AS cnt FROM hospital_workers");
 $total_donations = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations");
 $total_alerts = safe_count($conn, "SELECT COUNT(*) AS cnt FROM notices");
@@ -92,7 +92,7 @@ $rejected_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations WHERE
 $bg_res = mysqli_query(
     $conn,
     "SELECT blood_group, COUNT(*) AS cnt
-     FROM donors
+     FROM members
      GROUP BY blood_group
      ORDER BY cnt DESC"
 );
@@ -109,11 +109,11 @@ if ($bg_res) {
 // ─────────────────────────────────────────────────
 $top_donors_res = mysqli_query(
     $conn,
-    "SELECT s.donor_id, s.name, s.donor_code AS donor_id, s.blood_group,
+    "SELECT s.member_id, s.name, s.member_code AS donor_id, s.blood_group,
             COUNT(d.donation_id) AS donation_count
-     FROM donors s
-     LEFT JOIN donations d ON d.donor_id = s.donor_id
-     GROUP BY s.donor_id
+     FROM members s
+     LEFT JOIN donations d ON d.donor_id = s.member_id
+     GROUP BY s.member_id
      ORDER BY donation_count DESC
      LIMIT 10"
 );
@@ -136,15 +136,15 @@ $top_officers_res = mysqli_query(
 // Recent Blood Donations (filtered)
 // ─────────────────────────────────────────────────
 $recent_q = "SELECT d.donation_date AS entry_date,
-                    s.name AS donor_name, s.donor_code AS donor_id, d.blood_group,
+                    s.name AS donor_name, s.member_code AS donor_id, d.blood_group,
                     st.name AS officer_name,
                     COALESCE(br.hospital_name, r.name) AS hospital,
                     CONCAT(d.units, ' unit(s)') AS activities, d.status, d.created_at
              FROM donations d
-             LEFT JOIN donors s  ON s.donor_id = d.donor_id
+             LEFT JOIN members s  ON s.member_id = d.donor_id
              LEFT JOIN hospital_workers    st ON st.worker_id  = d.officer_id
              LEFT JOIN blood_requests br ON br.request_id = d.request_id
-             LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
+             LEFT JOIN members r ON r.member_id = d.recipient_id
              WHERE 1=1";
 if ($df)
     $recent_q .= " AND d.donation_date >= '$df'";
@@ -225,7 +225,7 @@ $alerts_res = mysqli_query(
                     <div class="card border-0 shadow-sm text-center py-3 h-100">
                         <div class="card-body p-2">
                             <h3 class="text-danger fw-bold"><?php echo $total_donors; ?></h3>
-                            <p class="mb-0 small text-muted">Donors</p>
+                            <p class="mb-0 small text-muted">Members</p>
                         </div>
                     </div>
                 </div>

@@ -4,7 +4,7 @@ require_once 'config/db.php';
 require_once 'inc/header.php';
 
 // Only donors (donors) can access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
     header("Location: user-login.php");
     exit;
 }

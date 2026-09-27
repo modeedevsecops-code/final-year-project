@@ -36,8 +36,7 @@
                 switch ($_SESSION['role']) {
                     case 'admin': $dashboardLink = 'dashboard.php'; break;
                     case 'officer': $dashboardLink = 'officer_dashboard.php'; break;
-                    case 'donor': $dashboardLink = 'donor_dashboard.php'; break;
-                    case 'recipient': $dashboardLink = 'recipient_dashboard.php'; break;
+                    case 'member': $dashboardLink = 'member_dashboard.php'; break;
                 }
                 ?>
                 <a href="<?php echo $dashboardLink; ?>" class="btn btn-danger rounded-pill ms-lg-3">Go to Dashboard</a>
@@ -70,8 +69,7 @@ if ($avatarLetter === '') { $avatarLetter = 'U'; }
 switch ($_SESSION['role'] ?? '') {
     case 'admin':      $dashLinkForRole = 'dashboard.php'; break;
     case 'officer': $dashLinkForRole = 'officer_dashboard.php'; break;
-    case 'donor':    $dashLinkForRole = 'donor_dashboard.php'; break;
-    case 'recipient':  $dashLinkForRole = 'recipient_dashboard.php'; break;
+    case 'member':    $dashLinkForRole = 'member_dashboard.php'; break;
     default:           $dashLinkForRole = 'index.php';
 }
 ?>
@@ -96,7 +94,7 @@ switch ($_SESSION['role'] ?? '') {
                     <div class="topbar-avatar"><?php echo htmlspecialchars($avatarLetter); ?></div>
                     <div>
                         <div class="tm-name"><?php echo htmlspecialchars($displayName); ?></div>
-                        <div class="tm-role"><?php echo htmlspecialchars(ucfirst($_SESSION['role'] === 'officer' ? 'Hospital Officer' : ($_SESSION['role'] === 'donor' ? 'Donor' : $_SESSION['role']))); ?></div>
+                        <div class="tm-role"><?php echo htmlspecialchars($_SESSION['role'] === 'officer' ? 'Hospital Officer' : ($_SESSION['role'] === 'member' ? 'Member' : ucfirst($_SESSION['role']))); ?></div>
                     </div>
                 </div>
                 <a class="topbar-menu-item" href="<?php echo $dashLinkForRole ?? '#'; ?>"><i class="fas fa-gauge"></i> Dashboard</a>
@@ -116,9 +114,8 @@ switch ($_SESSION['role'] ?? '') {
         if ($_SESSION['role'] == 'admin' ) { 
         ?>
             <li><a class="nav-link <?php echo $current_page=='dashboard.php'?'active':''; ?>" href="dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a class="nav-link <?php echo $current_page=='manage_donors.php'?'active':''; ?>" href="manage_donors.php"><i class="fas fa-tint"></i> Manage Donors</a></li>
+            <li><a class="nav-link <?php echo in_array($current_page,['manage_members.php','edit_member.php'])?'active':''; ?>" href="manage_members.php"><i class="fas fa-users"></i> Manage Members</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_officers.php'?'active':''; ?>" href="manage_officers.php"><i class="fas fa-briefcase"></i> Hospital Officers</a></li>
-            <li><a class="nav-link <?php echo $current_page=='manage_recipients.php'?'active':''; ?>" href="manage_recipients.php"><i class="fas fa-user-injured"></i> Recipients</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_blood_banks.php'?'active':''; ?>" href="manage_blood_banks.php"><i class="fas fa-hospital"></i> Blood Banks</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
             <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
@@ -142,22 +139,16 @@ switch ($_SESSION['role'] ?? '') {
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php
-        } elseif ($_SESSION['role'] == 'donor' ) {
+        } elseif ($_SESSION['role'] == 'member' ) {
         ?>
-            <li><a class="nav-link <?php echo $current_page=='donor_dashboard.php'?'active':''; ?>" href="donor_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
+            <li><a class="nav-link <?php echo $current_page=='member_dashboard.php'?'active':''; ?>" href="member_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='donation_form.php'?'active':''; ?>" href="donation_form.php"><i class="fas fa-tint"></i> Donate Blood</a></li>
+            <li><a class="nav-link <?php echo $current_page=='request_blood.php'?'active':''; ?>" href="request_blood.php"><i class="fas fa-hand-holding-medical"></i> Request Blood</a></li>
+            <li><a class="nav-link <?php echo $current_page=='request_history.php'?'active':''; ?>" href="request_history.php"><i class="fas fa-history"></i> Request History</a></li>
             <li><a class="nav-link <?php echo $current_page=='emergency_alerts.php'?'active':''; ?>" href="emergency_alerts.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Nearby Banks</a></li>
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        <?php
-        } elseif ($_SESSION['role'] == 'recipient' ) {
-        ?>
-            <li><a class="nav-link <?php echo $current_page=='recipient_dashboard.php'?'active':''; ?>" href="recipient_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a class="nav-link <?php echo $current_page=='request_blood.php'?'active':''; ?>" href="request_blood.php"><i class="fas fa-hand-holding-medical"></i> Request Blood</a></li>
-            <li><a class="nav-link <?php echo $current_page=='request_history.php'?'active':''; ?>" href="request_history.php"><i class="fas fa-history"></i> Request History</a></li>
-            <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Nearby Banks</a></li>
-            <li><a class="nav-link <?php echo $current_page=='logout.php'?'active':''; ?>" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php } ?>
     </ul>
 </nav>

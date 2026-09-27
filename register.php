@@ -22,38 +22,12 @@ include 'inc/header.php';
                         <div class="card shadow-sm border-0 p-4">
                             <div class="card-body">
                                 <h2 class="fw-bold text-center mb-3" style="color:#cc0000;">Create an Account</h2>
-                                <p class="text-muted text-center mb-4">Please select your role to proceed with registration.</p>
+                                <p class="text-muted text-center mb-4">
+                                    Register as a Member — one account to both donate and request blood.
+                                    <br><small>Hospital Officer accounts are created by system administrators only.</small>
+                                </p>
 
-                                <!-- Role Selection Dropdown -->
-                                <div class="form-group mb-4">
-                                    <label class="form-label fw-bold">Select Registration Role</label>
-                                    <select id="registerRoleSelect" class="form-select" onchange="toggleRegisterFields()">
-                                        <option value="">-- Choose Role to Register --</option>
-                                        <option value="donor">Blood Donor</option>
-                                        <option value="recipient">Recipient</option>
-                                    </select>
-                                    <small class="text-muted d-block mt-2">
-                                        Hospital Officer accounts are created by system administrators only.
-                                    </small>
-                                </div>
-
-                                <script>
-                                function toggleRegisterFields() {
-                                    const role = document.getElementById('registerRoleSelect').value;
-                                    document.getElementById('donorRegisterDiv').style.display = (role === 'donor') ? 'block' : 'none';
-                                    document.getElementById('recipientRegisterDiv').style.display = (role === 'recipient') ? 'block' : 'none';
-                                }
-                                </script>
-
-                                <!-- Donor Registration Form Container -->
-                                <div id="donorRegisterDiv" style="display:none;">
-                                    <?php include 'register_donor.php'; ?>
-                                </div>
-
-                                <!-- Recipient Registration Form Container -->
-                                <div id="recipientRegisterDiv" style="display:none;">
-                                    <?php include 'register_recipient.php'; ?>
-                                </div>
+                                <?php include 'register_member.php'; ?>
                             </div>
                         </div>
                     </div>

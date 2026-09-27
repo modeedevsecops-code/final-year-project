@@ -26,7 +26,7 @@ $dbb->user_login();
                 <div class="col-md-7 col-lg-5 text-center text-md-start mt-4 pt-3">
                     <h2 class="mb-3 text-center">Login Portal</h2>
                     <p class="text-center">
-                        Login as a registered Blood Donor, Hospital Officer, or Recipient to access your BloodLink dashboard.
+                        Login as a registered Member (donor &amp; recipient) or Hospital Officer to access your BloodLink dashboard.
                     </p>
 
                     <div class="card-body">
@@ -36,29 +36,18 @@ $dbb->user_login();
                                 <label class="form-label">Select Role</label>
                                 <select name="role" id="roleSelect" class="form-select" required onchange="toggleFields()">
                                     <option value="">-- Choose Role --</option>
-                                    <option value="donor">Blood Donor</option>
+                                    <option value="member">Member (Donor / Recipient)</option>
                                     <option value="officer">Hospital Officer</option>
-                                    <option value="recipient">Recipient</option>
                                 </select>
                             </div>
 
-                            <!-- Donor Fields -->
-                            <div id="donorField" style="display:none;">
+                            <!-- Member Fields -->
+                            <div id="memberField" style="display:none;">
                                 <div class="form-group mb-3">
-                                    <input type="text" name="donor_code" id="donor_code_field" class="form-control" placeholder="Enter Donor ID / Registration Number">
+                                    <input type="text" name="member_login" id="member_login_field" class="form-control" placeholder="Email or Member ID">
                                 </div>
                                 <div class="form-group mb-3">
-                                    <input type="password" name="donor_password" id="donor_pass_field" class="form-control" placeholder="Password">
-                                </div>
-                            </div>
-
-                            <!-- Recipient Fields -->
-                            <div id="recipientField" style="display:none;">
-                                <div class="form-group mb-3">
-                                    <input type="email" name="recipient_email" id="recipient_email_field" class="form-control" placeholder="Enter Recipient Email">
-                                </div>
-                                <div class="form-group mb-3">
-                                    <input type="password" name="recipient_password" id="recipient_pass_field" class="form-control" placeholder="Password">
+                                    <input type="password" name="member_password" id="member_pass_field" class="form-control" placeholder="Password">
                                 </div>
                             </div>
 
@@ -84,41 +73,31 @@ $dbb->user_login();
 <script>
 function toggleFields() {
     const role = document.getElementById('roleSelect').value;
-    const donorDiv = document.getElementById('donorField');
+    const memberDiv = document.getElementById('memberField');
     const officerDiv = document.getElementById('officerFields');
-    const recipientDiv = document.getElementById('recipientField');
-    
-    const regNo = document.getElementById('donor_code_field');
-    const donorPass = document.getElementById('donor_pass_field');
-    const recipientEmail = document.getElementById('recipient_email_field');
-    const recipientPass = document.getElementById('recipient_pass_field');
+
+    const memberLogin = document.getElementById('member_login_field');
+    const memberPass = document.getElementById('member_pass_field');
     const emailField = document.getElementById('email_field');
     const passField = document.getElementById('pass_field');
 
     // Hide all first
-    donorDiv.style.display = 'none';
+    memberDiv.style.display = 'none';
     officerDiv.style.display = 'none';
-    recipientDiv.style.display = 'none';
 
-    regNo.required = false;
-    donorPass.required = false;
-    recipientEmail.required = false;
-    recipientPass.required = false;
+    memberLogin.required = false;
+    memberPass.required = false;
     emailField.required = false;
     passField.required = false;
 
-    if (role === 'donor') {
-        donorDiv.style.display = 'block';
-        regNo.required = true;
-        donorPass.required = true;
+    if (role === 'member') {
+        memberDiv.style.display = 'block';
+        memberLogin.required = true;
+        memberPass.required = true;
     } else if (role === 'officer') {
         officerDiv.style.display = 'block';
         emailField.required = true;
         passField.required = true;
-    } else if (role === 'recipient') {
-        recipientDiv.style.display = 'block';
-        recipientEmail.required = true;
-        recipientPass.required = true;
     }
 }
 </script>

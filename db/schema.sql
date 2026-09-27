@@ -6,8 +6,13 @@
 --  a bank. The Blood Bank Locator ranks these banks by distance and routes to
 --  them (Nominatim + OSRM).
 --
---  Tables: login, blood_banks, hospital_workers, donors, recipients,
+--  Tables: login, blood_banks, hospital_workers, members,
 --          blood_requests, notices, donations, blood_stock, stock_alerts.
+--
+--  A `member` is a single unified account that BOTH donates (blood group,
+--  availability, 56-day clock) AND files blood requests — mirroring a real
+--  person who can give and need blood. Admins and hospital officers stay
+--  separate; the blood-bank spine is unchanged.
 --
 --  Import:  mysql -u root donor_app < db/schema.sql
 -- ============================================================================
@@ -25,6 +30,7 @@ DROP TABLE IF EXISTS `recipients`;
 DROP TABLE IF EXISTS `notices`;
 DROP TABLE IF EXISTS `blood_requests`;
 DROP TABLE IF EXISTS `donors`;
+DROP TABLE IF EXISTS `members`;
 DROP TABLE IF EXISTS `hospital_workers`;
 DROP TABLE IF EXISTS `blood_banks`;
 DROP TABLE IF EXISTS `login`;
@@ -77,50 +83,35 @@ CREATE TABLE `hospital_workers` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Hospital officers';
 
--- ------------------------------------------------------------- donors ----
--- Blood donors.
-CREATE TABLE `donors` (
-  `donor_id`          INT(11) NOT NULL AUTO_INCREMENT,
+-- ------------------------------------------------------------- members ----
+-- A member is one unified account: a potential DONOR (blood group, 56-day
+-- clock, availability) who can also be a RECIPIENT (file blood_requests).
+-- Logs in with email + password. member_code is a human-facing ID on records.
+CREATE TABLE `members` (
+  `member_id`           INT(11) NOT NULL AUTO_INCREMENT,
   `name`                VARCHAR(100) NOT NULL,
   `email`               VARCHAR(100) NOT NULL,
   `phone`               VARCHAR(20)  NOT NULL,
-  `donor_code`              VARCHAR(100) NOT NULL COMMENT 'Donor ID used at login',
+  `member_code`         VARCHAR(100) NOT NULL COMMENT 'Human-facing member ID (e.g. BL-KD-001)',
   `blood_group`         VARCHAR(5)   DEFAULT NULL COMMENT 'A+ A- B+ B- AB+ AB- O+ O-',
   `last_donation_date`  DATE         DEFAULT NULL COMMENT 'NULL = never donated; drives the 56-day rule',
   `address`             VARCHAR(255) DEFAULT NULL,
   `latitude`            DECIMAL(10,7) DEFAULT NULL,
   `longitude`           DECIMAL(10,7) DEFAULT NULL,
-  `is_available`        TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Donor opted in as available to donate',
+  `is_available`        TINYINT(1)   NOT NULL DEFAULT 1 COMMENT 'Opted in as available to donate',
   `availability_schedule` VARCHAR(20) NOT NULL DEFAULT 'anytime' COMMENT 'anytime/weekdays/weekends/mornings/afternoons/evenings/emergencies',
   `contact_preference`  VARCHAR(20)  NOT NULL DEFAULT 'both' COMMENT 'phone/sms/both/emergency-only',
-  `password`            VARCHAR(255) NOT NULL,
+  `password`            VARCHAR(255) NOT NULL COMMENT 'bcrypt via password_hash()',
   `created_at`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`          TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`donor_id`),
-  KEY `idx_donors_available` (`is_available`),
-  UNIQUE KEY `uq_donors_email` (`email`),
-  KEY `idx_donors_blood_group` (`blood_group`),
-  KEY `idx_donors_donor_code` (`donor_code`),
-  KEY `idx_donors_geo` (`latitude`,`longitude`)
+  PRIMARY KEY (`member_id`),
+  KEY `idx_members_available` (`is_available`),
+  UNIQUE KEY `uq_members_email` (`email`),
+  KEY `idx_members_blood_group` (`blood_group`),
+  KEY `idx_members_member_code` (`member_code`),
+  KEY `idx_members_geo` (`latitude`,`longitude`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Blood donors';
-
--- ----------------------------------------------------------- recipients ----
-CREATE TABLE `recipients` (
-  `recipient_id` INT(11) NOT NULL AUTO_INCREMENT,
-  `name`         VARCHAR(100) NOT NULL,
-  `email`        VARCHAR(100) NOT NULL,
-  `phone`        VARCHAR(20)  NOT NULL,
-  `address`      VARCHAR(255) DEFAULT NULL,
-  `blood_group`  VARCHAR(5)   DEFAULT NULL,
-  `latitude`     DECIMAL(10,7) DEFAULT NULL,
-  `longitude`    DECIMAL(10,7) DEFAULT NULL,
-  `password`     VARCHAR(255) NOT NULL COMMENT 'bcrypt via password_hash()',
-  `created_at`   TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (`recipient_id`),
-  UNIQUE KEY `uq_recipients_email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
-  COMMENT='Blood recipients / patients';
+  COMMENT='Unified member accounts — donor + recipient in one';
 
 -- ------------------------------------------------------- blood_requests ----
 CREATE TABLE `blood_requests` (
@@ -146,8 +137,9 @@ CREATE TABLE `blood_requests` (
   KEY `idx_requests_blood_group` (`blood_group`),
   KEY `fk_request_recipient` (`recipient_id`),
   CONSTRAINT `fk_request_recipient` FOREIGN KEY (`recipient_id`)
-    REFERENCES `recipients` (`recipient_id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+    REFERENCES `members` (`member_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='recipient_id = the member who requested the blood';
 
 -- ------------------------------------------------------------- notices ----
 -- Emergency alerts. officer_id NULL = system-generated.
@@ -166,8 +158,8 @@ CREATE TABLE `notices` (
 -- ----------------------------------------------------------- donations ----
 CREATE TABLE `donations` (
   `donation_id`   INT(11) NOT NULL AUTO_INCREMENT,
-  `donor_id`      INT(11) NOT NULL COMMENT 'FK -> donors.donor_id',
-  `recipient_id`  INT(11) DEFAULT NULL,
+  `donor_id`      INT(11) NOT NULL COMMENT 'FK -> members.member_id (member who donated)',
+  `recipient_id`  INT(11) DEFAULT NULL COMMENT 'FK -> members.member_id (member who received)',
   `request_id`    INT(11) DEFAULT NULL,
   `officer_id`    INT(11) NOT NULL COMMENT 'FK -> hospital_workers.worker_id, who confirmed it',
   `blood_bank_id` INT(11) DEFAULT NULL COMMENT 'FK -> blood_banks.bank_id, where it was banked',
@@ -183,9 +175,9 @@ CREATE TABLE `donations` (
   KEY `fk_donation_request` (`request_id`),
   KEY `fk_donation_bank` (`blood_bank_id`),
   CONSTRAINT `fk_donation_donor` FOREIGN KEY (`donor_id`)
-    REFERENCES `donors` (`donor_id`) ON DELETE CASCADE,
+    REFERENCES `members` (`member_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_donation_recipient` FOREIGN KEY (`recipient_id`)
-    REFERENCES `recipients` (`recipient_id`) ON DELETE SET NULL,
+    REFERENCES `members` (`member_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_donation_request` FOREIGN KEY (`request_id`)
     REFERENCES `blood_requests` (`request_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_donation_bank` FOREIGN KEY (`blood_bank_id`)

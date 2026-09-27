@@ -3,7 +3,7 @@ require_once 'config/db.php';
 require_once 'inc/header.php';
 
 // Donor-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'donor') {
+if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
     header("Location: user-login.php");
     exit;
 }
@@ -12,7 +12,7 @@ $donor_id = $_SESSION['user_id'];
 $ops = new operations();
 
 // Reuse the real eligibility logic already used by match_donor.php
-$check = mysqli_query($db->connection, "SELECT last_donation_date FROM donors WHERE donor_id = '" . intval($donor_id) . "'");
+$check = mysqli_query($db->connection, "SELECT last_donation_date FROM members WHERE member_id = '" . intval($donor_id) . "'");
 $donor_row = $check ? mysqli_fetch_assoc($check) : null;
 
 $is_eligible = $donor_row ? $ops->is_donor_eligible($donor_row['last_donation_date']) : false;
@@ -46,7 +46,7 @@ $days_remaining = $donor_row ? $ops->days_until_eligible($donor_row['last_donati
             <p class="text-muted mt-3">
                 You don't need to do anything else right now &mdash; donation records are created and verified
                 by your assigned hospital officer once you're matched to a request. You can check your
-                donation history any time from your <a href="donor_dashboard.php">Dashboard</a>.
+                donation history any time from your <a href="member_dashboard.php">Dashboard</a>.
             </p>
 
         </div>
