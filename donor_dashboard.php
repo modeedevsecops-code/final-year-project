@@ -23,14 +23,20 @@ if (!$donor_id && !empty($_SESSION['donor_code'])) {
     }
 }
 
+$ops = new operations();
+if ($donor_id) { $ops->update_donor_availability($donor_id); } // handles the POST
+
 $donor = null;
 if ($donor_id) {
-    $stmt = mysqli_query($db->connection, "SELECT donor_id, name, donor_code FROM donors WHERE donor_id = $donor_id");
+    $stmt = mysqli_query($db->connection, "SELECT donor_id, name, donor_code, is_available, availability_schedule, contact_preference FROM donors WHERE donor_id = $donor_id");
     if ($stmt) $donor = mysqli_fetch_assoc($stmt);
 }
 
 $userName = $donor['name'] ?? $_SESSION['user_name'] ?? 'Test User';
 $donorId  = $donor['donor_code'] ?? $_SESSION['donor_code'] ?? 'N/A';
+$isAvail  = (int)($donor['is_available'] ?? 1);
+$sched    = $donor['availability_schedule'] ?? 'anytime';
+$contact  = $donor['contact_preference'] ?? 'both';
 ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
@@ -53,6 +59,39 @@ $donorId  = $donor['donor_code'] ?? $_SESSION['donor_code'] ?? 'N/A';
             <span class="badge-pill">DASHBOARD OVERVIEW</span>
             <h1>Welcome back, <?php echo htmlspecialchars($userName); ?>!</h1>
             <p>Donor ID: <strong><?php echo htmlspecialchars($donorId); ?></strong> &nbsp;|&nbsp; Access your donation form, see emergency alerts, and find nearby blood banks.</p>
+          </div>
+
+          <!-- Availability -->
+          <div class="quick-card" style="text-align:left; margin-bottom:20px;">
+            <?php $ops->display_message(); ?>
+            <h3 style="margin:0 0 4px;"><i class="fas fa-hand-holding-heart" style="color:#cc0000;"></i> My Availability</h3>
+            <p style="color:#6c757d; font-size:.9rem;">Let blood banks know when you can donate. Available donors surface first when an officer searches for a match.</p>
+            <form method="POST" class="row g-2 align-items-end">
+              <?php bl_csrf_field(); ?>
+              <div class="col-md-3">
+                <label class="small fw-bold d-block">Status</label>
+                <label class="small"><input type="checkbox" name="is_available" value="1" <?= $isAvail?'checked':'' ?>> Available to donate</label>
+              </div>
+              <div class="col-md-3">
+                <label class="small fw-bold">Schedule</label>
+                <select name="availability_schedule" class="form-control form-select form-select-sm">
+                  <?php foreach (['anytime','weekdays','weekends','mornings','afternoons','evenings','emergencies'] as $s): ?>
+                    <option value="<?= $s ?>" <?= $sched===$s?'selected':'' ?>><?= ucfirst($s) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <label class="small fw-bold">Contact preference</label>
+                <select name="contact_preference" class="form-control form-select form-select-sm">
+                  <?php foreach (['both','phone','sms','emergency-only'] as $c): ?>
+                    <option value="<?= $c ?>" <?= $contact===$c?'selected':'' ?>><?= ucfirst($c) ?></option>
+                  <?php endforeach; ?>
+                </select>
+              </div>
+              <div class="col-md-3">
+                <button type="submit" name="btn_update_availability" class="btn btn-danger btn-sm w-100">Update Availability</button>
+              </div>
+            </form>
           </div>
 
           <!-- Quick Action Cards -->

@@ -98,6 +98,64 @@ function insert_donor($name, $email, $phone, $department, $blood_group, $passwor
     }
 }
 
+// Donor updates their own availability (toggle + schedule + contact preference).
+public function update_donor_availability($donor_id) {
+    global $db;
+    if (!isset($_POST['btn_update_availability'])) return;
+    bl_csrf_check();
+    $donor_id  = intval($donor_id);
+    $available = isset($_POST['is_available']) ? 1 : 0;
+    $schedule  = $db->check($_POST['availability_schedule'] ?? 'anytime');
+    $contact   = $db->check($_POST['contact_preference'] ?? 'both');
+    $q = "UPDATE donors SET is_available=$available, availability_schedule='$schedule', contact_preference='$contact' WHERE donor_id=$donor_id";
+    if (mysqli_query($db->connection, $q)) {
+        $this->set_message('<div class="alert alert-success text-center">Availability updated.</div>');
+    } else {
+        $this->set_message('<div class="alert alert-danger">Could not update availability.</div>');
+    }
+}
+
+// Directory search for the Find Donors page. $mode: 'compatible' (default) or
+// 'exact'. Optionally available-only, and ranked by distance from an origin.
+public function search_donors($blood_group, $mode = 'compatible', $available_only = true, $olat = null, $olng = null) {
+    global $db;
+    $blood_group = strtoupper(trim($blood_group));
+    if ($mode === 'exact') {
+        $types = [$blood_group];
+    } else {
+        $types = $this->get_compatible_donor_types($blood_group);
+    }
+    if (empty($types)) return [];
+    $in = implode(',', array_map(function($t) use ($db){ return "'".mysqli_real_escape_string($db->connection,$t)."'"; }, $types));
+
+    $has_geo = is_numeric($olat) && is_numeric($olng);
+    $dist = 'NULL AS distance_km';
+    if ($has_geo) {
+        $olat=(float)$olat; $olng=(float)$olng;
+        $dist = "CASE WHEN latitude IS NULL OR longitude IS NULL THEN NULL ELSE ROUND(
+                 6371*ACOS(LEAST(1.0, COS(RADIANS($olat))*COS(RADIANS(latitude))*COS(RADIANS(longitude)-RADIANS($olng))
+                 + SIN(RADIANS($olat))*SIN(RADIANS(latitude)))),1) END AS distance_km";
+    }
+    $avail = $available_only ? "AND is_available = 1" : "";
+    $q = "SELECT donor_id, name, email, phone, blood_group, last_donation_date, is_available,
+                 availability_schedule, contact_preference, latitude, longitude, $dist
+          FROM donors WHERE blood_group IN ($in) $avail";
+    $res = mysqli_query($db->connection, $q);
+    $rows = $res ? mysqli_fetch_all($res, MYSQLI_ASSOC) : [];
+    foreach ($rows as &$r) {
+        $r['eligible'] = $this->is_donor_eligible($r['last_donation_date']) ? 1 : 0;
+        $r['compatibility_score'] = $this->compatibility_score($r['blood_group'], $blood_group);
+    }
+    unset($r);
+    usort($rows, function($a,$b) use ($has_geo){
+        if ($a['eligible'] != $b['eligible']) return $b['eligible'] <=> $a['eligible'];
+        if ($a['compatibility_score'] != $b['compatibility_score']) return $b['compatibility_score'] <=> $a['compatibility_score'];
+        if ($has_geo){ $ad=is_null($a['distance_km'])?INF:(float)$a['distance_km']; $bd=is_null($b['distance_km'])?INF:(float)$b['distance_km']; if($ad!=$bd) return $ad<=>$bd; }
+        return strcmp($a['name'],$b['name']);
+    });
+    return $rows;
+}
+
 // Admin creates a recipient account. Was referenced by add_recipient.php but
 // never implemented (fatal for admins). Password hashed, address geocoded.
 public function add_recipient() {
@@ -704,6 +762,34 @@ public function update_donor($donor_id) {
         return isset($map[$recipient_blood_group]) ? $map[$recipient_blood_group] : [];
     }
 
+    // Compatibility score: exact match best, universal O- next, same ABO next.
+    // 0 = incompatible. Mirrors the ranking a clinician would prefer.
+    public function compatibility_score($donor_bg, $recipient_bg) {
+        $donor_bg = strtoupper(trim($donor_bg)); $recipient_bg = strtoupper(trim($recipient_bg));
+        if (!in_array($donor_bg, $this->get_compatible_donor_types($recipient_bg), true)) return 0;
+        if ($donor_bg === $recipient_bg) return 100;
+        if ($donor_bg === 'O-') return 90;
+        if (rtrim($donor_bg, '+-') === rtrim($recipient_bg, '+-')) return 80;
+        return 70;
+    }
+
+    // Blood-type rarity weight (1 common .. 10 rarest) — used to prioritise.
+    public function blood_type_rarity($bg) {
+        $r = ['AB-'=>10,'B-'=>9,'AB+'=>8,'A-'=>7,'O-'=>6,'B+'=>5,'A+'=>4,'O+'=>3];
+        return $r[strtoupper(trim($bg))] ?? 5;
+    }
+
+    // Emergency priority (0..100) from severity, blood-type rarity and time left.
+    public function compute_priority($severity, $blood_group, $hours_left = null) {
+        $sev = ['critical'=>60,'severe'=>40,'moderate'=>20,'low'=>5][strtolower((string)$severity)] ?? 20;
+        $rarity = $this->blood_type_rarity($blood_group) * 2;              // 6..20
+        $time = 0;
+        if (is_numeric($hours_left)) {
+            $time = $hours_left <= 3 ? 20 : ($hours_left <= 12 ? 12 : ($hours_left <= 48 ? 6 : 2));
+        }
+        return min(100, $sev + $rarity + $time);
+    }
+
     // Is a donor eligible right now? (56 days since last donation, or never donated)
     public function is_donor_eligible($last_donation_date) {
         if (empty($last_donation_date)) return true;
@@ -757,7 +843,7 @@ public function update_donor($donor_id) {
             $radius_clause = ($radius_km !== null && is_numeric($radius_km))
                 ? " AND $distance_expr <= " . (float)$radius_km : "";
             $query = "
-                SELECT donor_id, name, email, phone, blood_group, last_donation_date,
+                SELECT donor_id, name, email, phone, blood_group, last_donation_date, is_available,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
@@ -768,11 +854,10 @@ public function update_donor($donor_id) {
                   AND (last_donation_date IS NULL
                        OR DATEDIFF(CURDATE(), last_donation_date) >= " . self::DONATION_ELIGIBILITY_DAYS . ")
                   $radius_clause
-                ORDER BY (distance_km IS NULL), distance_km ASC, days_since_last_donation DESC
             ";
         } else {
             $query = "
-                SELECT donor_id, name, email, phone, blood_group, last_donation_date,
+                SELECT donor_id, name, email, phone, blood_group, last_donation_date, is_available,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
@@ -781,11 +866,29 @@ public function update_donor($donor_id) {
                 WHERE blood_group IN ($in_clause)
                 HAVING last_donation_date IS NULL
                        OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
-                ORDER BY days_since_last_donation DESC
             ";
         }
         $result = mysqli_query($db->connection, $query);
-        return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+        $rows = $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+
+        // Annotate each donor with a compatibility score + rarity, then rank:
+        // available first, then best compatibility, then nearest, then longest since donating.
+        foreach ($rows as &$r) {
+            $r['compatibility_score'] = $this->compatibility_score($r['blood_group'], $recipient_blood_group);
+            $r['rarity'] = $this->blood_type_rarity($r['blood_group']);
+        }
+        unset($r);
+        usort($rows, function($a, $b) use ($has_geo) {
+            if ($a['is_available'] != $b['is_available']) return $b['is_available'] <=> $a['is_available'];
+            if ($a['compatibility_score'] != $b['compatibility_score']) return $b['compatibility_score'] <=> $a['compatibility_score'];
+            if ($has_geo) {
+                $ad = is_null($a['distance_km']) ? INF : (float)$a['distance_km'];
+                $bd = is_null($b['distance_km']) ? INF : (float)$b['distance_km'];
+                if ($ad != $bd) return $ad <=> $bd;
+            }
+            return $b['days_since_last_donation'] <=> $a['days_since_last_donation'];
+        });
+        return $rows;
     }
 
     // Confirm a donor match: donor -> recipient/request, approved by officer.
@@ -999,6 +1102,17 @@ public function update_donor($donor_id) {
     public function get_open_blood_requests() {
         global $db;
         $query = "SELECT * FROM blood_requests WHERE status IN ('Pending','Approved') ORDER BY
+                    FIELD(urgency_level,'Critical Emergency','Urgent','Normal'), created_at ASC";
+        $result = mysqli_query($db->connection, $query);
+        return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];
+    }
+
+    // Open requests for the Emergency Board, ranked by computed priority_score
+    // (severity + rarity + time pressure) then by how long they've waited.
+    public function get_emergency_requests() {
+        global $db;
+        $query = "SELECT * FROM blood_requests WHERE status IN ('Pending','Approved')
+                  ORDER BY priority_score DESC,
                     FIELD(urgency_level,'Critical Emergency','Urgent','Normal'), created_at ASC";
         $result = mysqli_query($db->connection, $query);
         return $result ? mysqli_fetch_all($result, MYSQLI_ASSOC) : [];

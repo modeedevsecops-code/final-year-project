@@ -34,6 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $location      = trim($_POST['location'] ?? '');
     $urgencyLevel  = trim($_POST['urgency_level'] ?? '');
     $contactPhone  = trim($_POST['contact_phone'] ?? '');
+    $requiredHours = (int)($_POST['required_within_hours'] ?? 0);
+
+    // Severity mirrors the urgency choice, in the vocabulary the priority engine uses.
+    $severityMap = ['Critical Emergency' => 'critical', 'Urgent' => 'severe', 'Normal' => 'moderate'];
+    $severity    = $severityMap[$urgencyLevel] ?? 'moderate';
 
     $validBloodGroups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
     $validUrgency = ['Normal','Urgent','Critical Emergency'];
@@ -67,15 +72,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // appears on the map (Phase 3, BL-05). NULL coords if it can't be found.
         list($reqLat, $reqLng) = bl_geocode($hospitalName . ', ' . $location);
 
+        // Emergency priority score (0..100) drives the Emergency Board ordering.
+        $ops = new operations();
+        $hoursForScore = $requiredHours > 0 ? $requiredHours : null;
+        $priorityScore = $ops->compute_priority($severity, $bloodGroup, $hoursForScore);
+        $reqHoursSql   = $requiredHours > 0 ? $requiredHours : null;
+
         $stmt = mysqli_prepare($db_conn,
             "INSERT INTO blood_requests
-                (recipient_id, patient_name, blood_group, units_needed, hospital_name, location, latitude, longitude, urgency_level, status, requested_by, contact_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)"
+                (recipient_id, patient_name, blood_group, units_needed, hospital_name, location, latitude, longitude, urgency_level, severity, required_within_hours, priority_score, status, requested_by, contact_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)"
         );
         mysqli_stmt_bind_param(
-            $stmt, "ississddsss",
+            $stmt, "ississddssiiss",
             $recipientId, $patientName, $bloodGroup, $unitsNeeded,
-            $hospitalName, $location, $reqLat, $reqLng, $urgencyLevel, $recipientName, $contactPhone
+            $hospitalName, $location, $reqLat, $reqLng, $urgencyLevel,
+            $severity, $reqHoursSql, $priorityScore, $recipientName, $contactPhone
         );
 
         if (mysqli_stmt_execute($stmt)) {
@@ -170,6 +182,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                     <small>Immediate / life&#8209;threatening</small>
                                 </span>
                             </label>
+                        </div>
+                        <div class="rb-field rb-span-6" style="margin-top:14px;">
+                            <label>Needed within (hours) <small style="color:#eee;">— optional, sharpens priority</small></label>
+                            <input type="number" name="required_within_hours" min="1" max="720" form="rbForm"
+                                   placeholder="e.g. 6"
+                                   value="<?php echo htmlspecialchars($_POST['required_within_hours'] ?? ''); ?>">
                         </div>
                     </section>
 

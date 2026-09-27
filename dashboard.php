@@ -24,6 +24,16 @@ $active_alerts = safe_count($db, "SELECT COUNT(*) AS c FROM stock_alerts WHERE s
 $recent = $db->connection->query("SELECT * FROM blood_requests ORDER BY created_at DESC LIMIT 5");
 $recent_requests = $recent ? $recent->fetch_all(MYSQLI_ASSOC) : [];
 
+// Current stock by blood group (summed across all banks) — for the chart.
+$stock_by_group = [];
+$order = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
+$sres = $db->connection->query(
+    "SELECT blood_type, SUM(units_available) AS units FROM blood_stock GROUP BY blood_type"
+);
+if ($sres) { while ($row = $sres->fetch_assoc()) { $stock_by_group[$row['blood_type']] = (int)$row['units']; } }
+$stock_labels = $order;
+$stock_values = array_map(function ($g) use ($stock_by_group) { return $stock_by_group[$g] ?? 0; }, $order);
+
 $adminName = $_SESSION['user_name'] ?? 'Admin';
 
 include 'inc/header.php';
@@ -73,6 +83,12 @@ include 'inc/navbar.php';
         </div>
     </div>
 
+    <!-- Stock chart -->
+    <div class="quick-card" style="text-align:left; margin-bottom:1.5rem;">
+        <h3 style="margin-bottom:1rem;">Current Blood Stock by Group (all banks)</h3>
+        <canvas id="stockChart" height="90"></canvas>
+    </div>
+
     <!-- Recent activity -->
     <div class="quick-card" style="text-align:left;">
         <h3 style="margin-bottom:1rem;">Recent Blood Requests</h3>
@@ -105,3 +121,22 @@ include 'inc/navbar.php';
     </div>
 
 </div>
+
+<?php include 'inc/main_js.php'; ?>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function () {
+    if (typeof Chart === 'undefined') return;
+    var el = document.getElementById('stockChart');
+    if (!el) return;
+    new Chart(el, {
+        type: 'bar',
+        data: {
+            labels: <?php echo json_encode($stock_labels); ?>,
+            datasets: [{ label: 'Units available', data: <?php echo json_encode($stock_values); ?>, backgroundColor: '#cc0000' }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } },
+                   scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+    });
+})();
+</script>

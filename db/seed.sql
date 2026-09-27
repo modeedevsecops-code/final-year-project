@@ -117,3 +117,12 @@ INSERT INTO `notices` (`officer_id`,`title`,`message`) VALUES
 (1,    'O- donors needed at Barau Dikko', 'We are critically low on O-. Any eligible O- donor please report to the blood bank.'),
 (NULL, 'Emergency: O- blood needed at Barau Dikko Teaching Hospital',
        '2 unit(s) of O- needed urgently for patient Hassan Umar at Barau Dikko Teaching Hospital (Kaduna). Contact: 08051112201.');
+
+-- ---- Donor availability (defaults: available=1 / anytime / both) ----
+UPDATE donors SET is_available = 0 WHERE donor_id IN (5, 8);            -- a couple unavailable for demo
+UPDATE donors SET availability_schedule='emergencies', contact_preference='phone' WHERE donor_id = 1;
+
+-- ---- Emergency severity + priority on seeded requests ----
+UPDATE blood_requests SET severity='critical', required_within_hours=3,  priority_score=95 WHERE request_id = 1;
+UPDATE blood_requests SET severity='severe',   required_within_hours=8,  priority_score=70 WHERE request_id = 2;
+UPDATE blood_requests SET severity='moderate', required_within_hours=48, priority_score=40 WHERE request_id = 3;

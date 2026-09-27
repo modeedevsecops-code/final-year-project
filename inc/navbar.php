@@ -121,6 +121,8 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='manage_recipients.php'?'active':''; ?>" href="manage_recipients.php"><i class="fas fa-user-injured"></i> Recipients</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_blood_banks.php'?'active':''; ?>" href="manage_blood_banks.php"><i class="fas fa-hospital"></i> Blood Banks</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
+            <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
+            <li><a class="nav-link <?php echo $current_page=='find_donors.php'?'active':''; ?>" href="find_donors.php"><i class="fas fa-magnifying-glass"></i> Find Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_blood_stock.php'?'active':''; ?>" href="manage_blood_stock.php"><i class="fas fa-flask"></i> Blood Stock</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
@@ -133,6 +135,8 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='officer_dashboard.php'?'active':''; ?>" href="officer_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='assigned_donors.php'?'active':''; ?>" href="assigned_donors.php"><i class="fas fa-users"></i> Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
+            <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
+            <li><a class="nav-link <?php echo $current_page=='find_donors.php'?'active':''; ?>" href="find_donors.php"><i class="fas fa-magnifying-glass"></i> Find Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
             <li class="sidebar-sep"></li>

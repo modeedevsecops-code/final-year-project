@@ -81,6 +81,8 @@ $has_request_geo = $request && is_numeric($request['latitude'] ?? null) && is_nu
           <tr>
             <th>Name</th>
             <th>Blood Group</th>
+            <th>Match</th>
+            <th>Availability</th>
             <?php if ($has_request_geo): ?><th>Distance</th><?php endif; ?>
             <th>Last Donation</th>
             <th>Days Since Last</th>
@@ -93,6 +95,10 @@ $has_request_geo = $request && is_numeric($request['latitude'] ?? null) && is_nu
             <tr>
               <td><?= htmlspecialchars($donor['name']) ?></td>
               <td><?= htmlspecialchars($donor['blood_group']) ?></td>
+              <td><span class="badge-pill" style="background:#eef2f5;color:#3f6b7a;font-weight:600;"><?= (int)$donor['compatibility_score'] ?></span></td>
+              <td><?= !empty($donor['is_available'])
+                      ? '<span style="color:#2c8a4a;font-weight:600;">&#9679; Available</span>'
+                      : '<span style="color:#999;">Unavailable</span>' ?></td>
               <?php if ($has_request_geo): ?>
                 <td><?= isset($donor['distance_km']) && $donor['distance_km'] !== null
                         ? htmlspecialchars($donor['distance_km']) . ' km'

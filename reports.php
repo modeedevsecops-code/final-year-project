@@ -271,6 +271,26 @@ $alerts_res = mysqli_query(
                 </div>
             </div>
 
+            <!-- Charts -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-7">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-dark text-white fw-bold">Donor Blood-Group Distribution</div>
+                        <div class="card-body">
+                            <canvas id="bgChart" height="130"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-dark text-white fw-bold">Donation Status</div>
+                        <div class="card-body d-flex align-items-center justify-content-center">
+                            <canvas id="statusChart" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Donation Status Breakdown -->
             <div class="row g-3 mb-4">
                 <div class="col-md-4">
@@ -491,6 +511,37 @@ $alerts_res = mysqli_query(
     </main>
 
     <?php include 'inc/main_js.php'; ?>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script>
+    (function () {
+        if (typeof Chart === 'undefined') return;
+        var bgLabels = <?php echo json_encode(array_column($blood_groups, 'blood_group')); ?>;
+        var bgCounts = <?php echo json_encode(array_map('intval', array_column($blood_groups, 'cnt'))); ?>;
+        var bgEl = document.getElementById('bgChart');
+        if (bgEl && bgLabels.length) {
+            new Chart(bgEl, {
+                type: 'bar',
+                data: { labels: bgLabels, datasets: [{ label: 'Donors', data: bgCounts, backgroundColor: '#cc0000' }] },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+            });
+        }
+        var statusEl = document.getElementById('statusChart');
+        if (statusEl) {
+            new Chart(statusEl, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'Pending', 'Cancelled'],
+                    datasets: [{
+                        data: [<?php echo (int)$approved_count; ?>, <?php echo (int)$pending_count; ?>, <?php echo (int)$rejected_count; ?>],
+                        backgroundColor: ['#2f8f5b', '#e0a800', '#cc0000']
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+    })();
+    </script>
 </body>
 
 </html>
