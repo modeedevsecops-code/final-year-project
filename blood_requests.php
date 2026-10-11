@@ -4,14 +4,11 @@ $ops = new operations();
 
 // Admins and hospital officers both manage the request queue (this page is in
 // both sidebars). Was officer-only, which bounced admins to the login form.
-if (empty($_SESSION['Active']) || !in_array($_SESSION['role'] ?? '', ['admin', 'officer'], true)) {
-    header('Location: login.php');
-    exit;
-}
+bl_require_role(['admin', 'officer']);
 
 $requests = $ops->get_open_blood_requests(); // Pending + Approved, most urgent first
-include 'inc/header.php';
 ?>
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 <body>

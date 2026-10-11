@@ -2,9 +2,7 @@
 // Find Donors — search the available, compatible donor pool near a location.
 // Admin/officer facing (the brief's "find nearby donors").
 require_once 'config/db.php';
-if (empty($_SESSION['role']) || !in_array($_SESSION['role'], ['admin','officer'], true)) {
-    header('Location: login.php'); exit;
-}
+bl_require_role(['admin', 'officer']);
 $ops   = new operations();
 $banks = $ops->get_blood_banks();
 
@@ -17,8 +15,8 @@ foreach ($banks as $b) { if ((int)$b['bank_id'] === $originBank) { $olat=$b['lat
 
 $results = ($bg !== '') ? $ops->search_donors($bg, $mode, $availOnly, $olat, $olng) : [];
 $groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
-include 'inc/header.php';
 ?>
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 <body>

@@ -1,12 +1,8 @@
 <?php
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
 // Donor-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
-    header("Location: user-login.php");
-    exit;
-}
+bl_require_role('member');
 
 $donor_id = $_SESSION['user_id'];
 $ops = new operations();
@@ -18,6 +14,7 @@ $donor_row = $check ? mysqli_fetch_assoc($check) : null;
 $is_eligible = $donor_row ? $ops->is_donor_eligible($donor_row['last_donation_date']) : false;
 $days_remaining = $donor_row ? $ops->days_until_eligible($donor_row['last_donation_date']) : 0;
 ?>
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 <body>
@@ -46,7 +43,7 @@ $days_remaining = $donor_row ? $ops->days_until_eligible($donor_row['last_donati
             <p class="text-muted mt-3">
                 You don't need to do anything else right now &mdash; donation records are created and verified
                 by your assigned hospital officer once you're matched to a request. You can check your
-                donation history any time from your <a href="member_dashboard.php">Dashboard</a>.
+                donation history any time under <a href="my_donations.php">My Donations</a>.
             </p>
 
         </div>

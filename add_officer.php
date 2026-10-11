@@ -1,12 +1,8 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
 
 // Admin-only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 global $db;
 $conn = $db->connection;
@@ -16,29 +12,12 @@ $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     bl_csrf_check();      // BL-14
-    $name = mysqli_real_escape_string($conn, trim($_POST['name']));
-    $email      = mysqli_real_escape_string($conn, trim($_POST['email']));
-    $phone      = mysqli_real_escape_string($conn, trim($_POST['phone']));
-    $position   = mysqli_real_escape_string($conn, trim($_POST['position'] ?: 'Blood Bank Officer'));
-    $bank_id    = intval($_POST['blood_bank_id'] ?? 0);
-    $bank_sql   = $bank_id ? "'$bank_id'" : 'NULL';
-    // Hash the officer's password at creation (BL-12).
-    $password   = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
-
-    if ($name && $email && $phone && !empty(trim($_POST['password']))) {
-        $q = "INSERT INTO hospital_workers (name, phone, email, position, blood_bank_id, password)
-              VALUES ('$name', '$phone', '$email', '$position', $bank_sql, '$password')";
-        if (mysqli_query($conn, $q)) {
-            $msg = '<div class="alert alert-success text-center">Hospital Officer added successfully! <a href="manage_officers.php">View all officers</a></div>';
-        } else {
-            $msg = '<div class="alert alert-danger">Error: ' . mysqli_error($conn) . '</div>';
-        }
-    } else {
-        $msg = '<div class="alert alert-warning text-center">Please fill in all required fields.</div>';
-    }
+    list($added, $msg) = bl_create_officer($conn, $_POST);
+    if ($added) $msg = str_replace('</div>', ' <a href="manage_officers.php">View all officers</a></div>', $msg);
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 <head>

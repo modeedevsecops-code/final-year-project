@@ -358,3 +358,11 @@ main.main > .container-fluid {
 .sidebar-nav .nav-link.sidebar-logout { color: #b00020; }
 .sidebar-nav .nav-link.sidebar-logout i { color: #b00020; }
 .sidebar-nav .nav-link.sidebar-logout:hover { background: #fdeaea; color: #7a0000; }
+
+/* ===== Phone-width topbar: keep the brand, bell and avatar from colliding ===== */
+a.topbar-bell { text-decoration: none; }
+@media (max-width: 575px) {
+    .topbar { padding-right: 1rem; }
+    .topbar-right { gap: 1rem; }
+    .topbar-username { display: none; }
+}

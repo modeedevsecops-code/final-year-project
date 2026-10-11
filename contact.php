@@ -1,12 +1,12 @@
 <?php
 // Include necessary files and database connection
-include 'inc/header.php';
 include 'config/db.php';
 
 $dbb = new operations();
 // $dbb->handle_contact_form(); // Uncomment when handler is ready
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 

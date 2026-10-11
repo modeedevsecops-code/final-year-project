@@ -30,10 +30,10 @@ foreach ($members as $m) {
     $last = $m['last_donation_date'] ?: 'Never';
     echo "<tr>
             <td>{$counter}</td>
-            <td>" . htmlspecialchars($m['name']) . "</td>
-            <td>" . htmlspecialchars($m['email']) . "</td>
-            <td>" . htmlspecialchars($m['phone']) . "</td>
-            <td>" . htmlspecialchars($m['member_code']) . "</td>
+            <td>" . htmlspecialchars(bl_csv_cell($m['name'])) . "</td>
+            <td>" . htmlspecialchars(bl_csv_cell($m['email'])) . "</td>
+            <td>" . htmlspecialchars(bl_csv_cell($m['phone'])) . "</td>
+            <td>" . htmlspecialchars(bl_csv_cell($m['member_code'])) . "</td>
             <td>" . htmlspecialchars($m['blood_group'] ?? 'N/A') . "</td>
             <td>{$available}</td>
             <td>{$last}</td>

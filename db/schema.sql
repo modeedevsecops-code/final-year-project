@@ -108,7 +108,7 @@ CREATE TABLE `members` (
   KEY `idx_members_available` (`is_available`),
   UNIQUE KEY `uq_members_email` (`email`),
   KEY `idx_members_blood_group` (`blood_group`),
-  KEY `idx_members_member_code` (`member_code`),
+  UNIQUE KEY `uq_members_member_code` (`member_code`),
   KEY `idx_members_geo` (`latitude`,`longitude`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Unified member accounts — donor + recipient in one';

@@ -1,42 +1,26 @@
 <?php
 require_once 'config/db.php';
+bl_require_role(['admin', 'officer']);
 
-// Allow both admin and officer roles
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'officer'])) {
-    header("Location: login.php");
+// Deletes go through POST + CSRF only (a GET link could be triggered by any page).
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: notices.php');
     exit;
 }
+bl_csrf_check();
 
-$is_admin = ($_SESSION['role'] === 'admin');
-$dbb = new operations();
+$dbb       = new operations();
+$notice_id = intval($_POST['notice_id'] ?? 0);
+$notice    = $dbb->get_notice_by_id($notice_id);
 
-if (isset($_GET['id'])) {
-    $notice_id = intval($_GET['id']);
-    $notice    = $dbb->get_notice_by_id($notice_id);
+// Admin can delete any alert; an officer only their own.
+$officer_id = intval($_SESSION['officer_id'] ?? 0);
+$allowed = $notice && ($_SESSION['role'] === 'admin' || (int)$notice['officer_id'] === $officer_id);
 
-    if ($notice) {
-        if ($is_admin) {
-            // Admin can delete ANY alert
-            $dbb->delete_notice($notice_id);
-            header("Location: notices.php");
-            exit;
-        } else {
-            // Officer can only delete their own alert
-            $officer_id = isset($_SESSION['officer_id']) ? intval($_SESSION['officer_id']) : 0;
-            if ($notice['officer_id'] == $officer_id) {
-                $dbb->delete_notice($notice_id);
-                header("Location: notices.php");
-                exit;
-            } else {
-                echo "<script>alert('You are not authorized to delete this alert.'); window.location='notices.php';</script>";
-                exit;
-            }
-        }
-    } else {
-        header("Location: notices.php");
-        exit;
-    }
+if ($allowed) {
+    $dbb->delete_notice($notice_id);
+    header('Location: notices.php?deleted=1');
 } else {
-    header("Location: notices.php");
-    exit;
+    header('Location: notices.php?denied=1');
 }
+exit;

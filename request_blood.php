@@ -1,15 +1,8 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
 // Recipients only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
-    header("Location: login.php");
-    exit;
-}
+bl_require_role('member');
 
 $db_conn = $db->connection;
 

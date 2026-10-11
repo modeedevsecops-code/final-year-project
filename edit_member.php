@@ -1,26 +1,23 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
-
-// Admin-only access check
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 $dbb = new operations();
+$member_id = intval($_GET['id'] ?? 0);
 
-$member = null;
-if (isset($_GET['id'])) {
-    $member_id = intval($_GET['id']);
-    $member = $dbb->get_donor_by_id($member_id);
-}
-
-// If the form is submitted, update the member record
 if (isset($_POST['btn_update_member'])) {
     bl_csrf_check();      // BL-14
-    $dbb->update_donor($member_id);
+    $dbb->update_donor($member_id);   // redirects on success
 }
+$member = $member_id ? $dbb->get_donor_by_id($member_id) : null;
+// After a failed save, show what the admin typed rather than the stored row.
+if ($member && isset($_POST['btn_update_member'])) {
+    foreach (['name', 'email', 'phone', 'member_code', 'blood_group', 'address'] as $k) {
+        $member[$k] = $_POST[$k] ?? $member[$k];
+    }
+    $member['is_available'] = isset($_POST['is_available']) ? 1 : 0;
+}
+include 'inc/header.php';
 ?>
 
 <!DOCTYPE html>
@@ -67,7 +64,7 @@ if (isset($_POST['btn_update_member'])) {
                   <div class="col-md-6 mb-3">
                     <label for="blood_group" class="form-label fw-bold">Blood Group</label>
                     <select class="form-control" id="blood_group" name="blood_group" required>
-                        <option value="">Select Blood Group</option>
+                            <option value="">Select Blood Group</option>
                         <?php foreach (['A+','A-','B+','B-','O+','O-','AB+','AB-'] as $g): ?>
                           <option value="<?= $g ?>" <?php if (($member['blood_group'] ?? '') === $g) echo 'selected'; ?>><?= $g ?></option>
                         <?php endforeach; ?>
@@ -75,8 +72,20 @@ if (isset($_POST['btn_update_member'])) {
                   </div>
                 </div>
                 <div class="mb-3">
-                  <label for="address" class="form-label fw-bold">Address / Location <small class="text-muted">(leave blank to keep current)</small></label>
+                  <label for="address" class="form-label fw-bold">Address / Location</label>
                   <input type="text" class="form-control" id="address" name="address" value="<?php echo htmlspecialchars($member['address'] ?? ''); ?>" placeholder="Street, LGA, State">
+                </div>
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label for="password" class="form-label fw-bold">New Password <small class="text-muted">(optional)</small></label>
+                    <input type="password" class="form-control" id="password" name="password" placeholder="Leave blank to keep current" autocomplete="new-password">
+                  </div>
+                  <div class="col-md-6 mb-3 d-flex align-items-end">
+                    <div class="form-check mb-2">
+                      <input class="form-check-input" type="checkbox" id="is_available" name="is_available" value="1" <?= !empty($member['is_available']) ? 'checked' : '' ?>>
+                      <label class="form-check-label fw-bold" for="is_available">Available to donate</label>
+                    </div>
+                  </div>
                 </div>
                 <div class="mt-4 d-flex gap-2">
                     <button type="submit" name="btn_update_member" class="btn btn-danger px-4">Update Member</button>

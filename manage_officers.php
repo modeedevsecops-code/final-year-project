@@ -1,12 +1,8 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
 
 // Admin-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 global $db;
 $conn = $db->connection;
@@ -18,27 +14,7 @@ $dbb = new operations();
 $form_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     bl_csrf_check();      // BL-14
-    $name = mysqli_real_escape_string($conn, trim($_POST['name']));
-    $email = mysqli_real_escape_string($conn, trim($_POST['email']));
-    $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
-    $position = mysqli_real_escape_string($conn, trim($_POST['position'] ?: 'Blood Bank Officer'));
-    $bank_id  = intval($_POST['blood_bank_id'] ?? 0);
-    $bank_sql = $bank_id ? "'$bank_id'" : 'NULL';
-    // Hash the officer password at creation (BL-12).
-    $plain_password = trim($_POST['password']);
-    $password = password_hash($plain_password, PASSWORD_DEFAULT);
-
-    if ($name && $email && $phone && $plain_password !== '') {
-        $q = "INSERT INTO hospital_workers (name, phone, email, position, blood_bank_id, password)
-              VALUES ('$name', '$phone', '$email', '$position', $bank_sql, '$password')";
-        if (mysqli_query($conn, $q)) {
-            $form_msg = '<div class="alert alert-success">Hospital Officer added successfully!</div>';
-        } else {
-            $form_msg = '<div class="alert alert-danger">Error: ' . mysqli_error($conn) . '</div>';
-        }
-    } else {
-        $form_msg = '<div class="alert alert-warning">Please fill in all required fields.</div>';
-    }
+    list($added, $form_msg) = bl_create_officer($conn, $_POST);
 }
 
 // ─────────────────────────────────────────────────
@@ -47,6 +23,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
     bl_csrf_check(); // BL-14 — was a CSRF-able GET link
     $del_id = intval($_POST['delete_id']);
+    $has = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS n FROM donations WHERE officer_id = $del_id"));
+    if ((int)$has['n'] > 0) {
+        header('Location: manage_officers.php?blocked=' . (int)$has['n']);
+        exit;
+    }
     if ($stmt = mysqli_prepare($conn, "DELETE FROM hospital_workers WHERE worker_id = ?")) {
         mysqli_stmt_bind_param($stmt, "i", $del_id);
         mysqli_stmt_execute($stmt);
@@ -79,6 +60,7 @@ if ($officers_res) {
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 
@@ -113,6 +95,9 @@ if ($officers_res) {
                     echo $form_msg; ?>
                 <?php if (isset($_GET['deleted'])): ?>
                     <div class="alert alert-success alert-dismissible fade show">Officer deleted successfully.</div>
+                <?php endif; ?>
+                <?php if (isset($_GET['blocked'])): ?>
+                    <div class="alert alert-warning">This officer has confirmed <?= (int)$_GET['blocked'] ?> donation(s), so they can't be deleted without breaking the donation ledger.</div>
                 <?php endif; ?>
 
                 <!-- Officers Table -->

@@ -1,12 +1,8 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
 
 // Admin-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 global $db;
 $conn = $db->connection;
@@ -14,8 +10,9 @@ $conn = $db->connection;
 // ─────────────────────────────────────────────────
 // Filters
 // ─────────────────────────────────────────────────
-$date_from = isset($_GET['date_from']) ? $_GET['date_from'] : '';
-$date_to = isset($_GET['date_to']) ? $_GET['date_to'] : '';
+$valid_date = function ($d) { return (is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) ? $d : ''; };
+$date_from = $valid_date($_GET['date_from'] ?? '');
+$date_to   = $valid_date($_GET['date_to'] ?? '');
 $export = isset($_GET['export']) ? $_GET['export'] : '';
 
 $df = $date_from ? mysqli_real_escape_string($conn, $date_from) : '';
@@ -49,10 +46,10 @@ if ($export === 'donations_csv') {
     $res = mysqli_query($conn, $q);
     $n = 1;
     while ($r = mysqli_fetch_assoc($res)) {
-        fputcsv($out, [
-            $n++, $r['donation_date'], $r['donor_name'], $r['donor_id'], $r['blood_group'],
+        fputcsv($out, array_map('bl_csv_cell', [
+            $n++, $r['donation_date'], $r['donor_name'] ?? '(deleted member)', $r['donor_id'], $r['blood_group'],
             $r['officer_name'], $r['hospital'], $r['units'], $r['status'], $r['created_at']
-        ]);
+        ]));
     }
     fclose($out);
     exit();
@@ -167,6 +164,7 @@ $alerts_res = mysqli_query(
 );
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 

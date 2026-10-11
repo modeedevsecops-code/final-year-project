@@ -1,57 +1,36 @@
 <?php
 require_once 'config/db.php';
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+bl_require_role('admin');
 
 $conn = $db->connection;
 $ops  = new operations();
 $banks = $ops->get_blood_banks();
 
 // --- Handle stock update (scoped to one bank + type) ---
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_update_stock'])) {
     bl_csrf_check(); // BL-14
-    $stock_id  = intval($_POST['stock_id']);
-    $units     = intval($_POST['units_available']);
-    $threshold = intval($_POST['low_stock_threshold']);
+    $stock_id  = intval($_POST['stock_id'] ?? 0);
+    $units     = filter_var($_POST['units_available'] ?? '', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100000]]);
+    $threshold = filter_var($_POST['low_stock_threshold'] ?? '', FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100000]]);
     $admin_id  = $_SESSION['user_id'] ?? null;
 
-    // Look up this row's bank + type before updating (needed for alert logic).
     $typeStmt = $conn->prepare("SELECT blood_bank_id, blood_type FROM blood_stock WHERE id = ?");
     $typeStmt->bind_param("i", $stock_id);
     $typeStmt->execute();
     $typeRow = $typeStmt->get_result()->fetch_assoc();
     $typeStmt->close();
-    $bank_id    = $typeRow['blood_bank_id'] ?? null;
-    $blood_type = $typeRow['blood_type'] ?? null;
+    $bank_id = $typeRow['blood_bank_id'] ?? 0;
+
+    if (!$typeRow || $units === false || $threshold === false) {
+        header("Location: manage_blood_stock.php?bank=" . intval($bank_id) . "&invalid=1");
+        exit();
+    }
 
     $stmt = $conn->prepare("UPDATE blood_stock SET units_available = ?, low_stock_threshold = ?, updated_by = ? WHERE id = ?");
     $stmt->bind_param("iiii", $units, $threshold, $admin_id, $stock_id);
     $stmt->execute();
     $stmt->close();
-
-    if ($bank_id && $blood_type) {
-        if ($units < $threshold) {
-            // Raise an alert for this bank+type if one isn't already active.
-            $checkStmt = $conn->prepare("SELECT id FROM stock_alerts WHERE blood_bank_id = ? AND blood_type = ? AND status = 'active'");
-            $checkStmt->bind_param("is", $bank_id, $blood_type);
-            $checkStmt->execute();
-            $existing = $checkStmt->get_result()->fetch_assoc();
-            $checkStmt->close();
-            if (!$existing) {
-                $insertStmt = $conn->prepare("INSERT INTO stock_alerts (blood_bank_id, blood_type, units_at_alert, threshold, status) VALUES (?, ?, ?, ?, 'active')");
-                $insertStmt->bind_param("isii", $bank_id, $blood_type, $units, $threshold);
-                $insertStmt->execute();
-                $insertStmt->close();
-            }
-        } else {
-            $resolveStmt = $conn->prepare("UPDATE stock_alerts SET status = 'resolved', resolved_at = NOW() WHERE blood_bank_id = ? AND blood_type = ? AND status = 'active'");
-            $resolveStmt->bind_param("is", $bank_id, $blood_type);
-            $resolveStmt->execute();
-            $resolveStmt->close();
-        }
-    }
+    bl_sync_stock_alert($conn, $bank_id, $typeRow['blood_type']);
 
     header("Location: manage_blood_stock.php?bank=" . intval($bank_id) . "&updated=1");
     exit();
@@ -92,6 +71,11 @@ include 'inc/navbar.php';
         <p>Units are tracked per blood bank. Pick a bank, then update units and thresholds per blood type.</p>
     </div>
 
+    <?php if (isset($_GET['invalid'])): ?>
+        <div style="background:#fdecea; color:#a51d1d; padding:12px 18px; border-radius:8px; margin-bottom:20px; font-weight:600;">
+            Units and threshold must be whole numbers of 0 or more.
+        </div>
+    <?php endif; ?>
     <?php if (isset($_GET['updated'])): ?>
         <div style="background:#e6f7ee; color:#0a7a3d; padding:12px 18px; border-radius:8px; margin-bottom:20px; font-weight:600;">
             Stock updated successfully.
@@ -146,24 +130,24 @@ include 'inc/navbar.php';
                     $isLow = $row['units_available'] < $row['low_stock_threshold'];
                 ?>
                 <tr style="border-bottom:1px solid #f0f0f0; <?= $isLow ? 'background:#fff5f5;' : '' ?>">
-                    <form method="POST">
-                        <?php bl_csrf_field(); // BL-14 ?>
                         <td style="padding:10px; font-weight:700; color:<?= $isLow ? '#d32f2f' : '#7a0000' ?>;">
                             <?= htmlspecialchars($row['blood_type']) ?>
                             <?php if ($isLow): ?><i class="fas fa-triangle-exclamation" style="margin-left:6px;"></i><?php endif; ?>
                         </td>
                         <td style="padding:10px;">
-                            <input type="hidden" name="stock_id" value="<?= $row['id'] ?>">
-                            <input type="number" name="units_available" value="<?= $row['units_available'] ?>" min="0" style="width:80px; padding:6px; border:1px solid #ddd; border-radius:6px;">
+                            <input type="number" form="stock-<?= (int)$row['id'] ?>" name="units_available" value="<?= (int)$row['units_available'] ?>" min="0" required aria-label="Units available" style="width:80px; padding:6px; border:1px solid #ddd; border-radius:6px;">
                         </td>
                         <td style="padding:10px;">
-                            <input type="number" name="low_stock_threshold" value="<?= $row['low_stock_threshold'] ?>" min="0" style="width:80px; padding:6px; border:1px solid #ddd; border-radius:6px;">
+                            <input type="number" form="stock-<?= (int)$row['id'] ?>" name="low_stock_threshold" value="<?= (int)$row['low_stock_threshold'] ?>" min="0" required aria-label="Low stock threshold" style="width:80px; padding:6px; border:1px solid #ddd; border-radius:6px;">
                         </td>
                         <td style="padding:10px; color:#6c757d; font-size:0.9rem;"><?= htmlspecialchars($row['last_updated']) ?></td>
                         <td style="padding:10px;">
-                            <button type="submit" style="background:#7a0000; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;">Update</button>
+                            <form method="POST" id="stock-<?= (int)$row['id'] ?>">
+                                <?php bl_csrf_field(); // BL-14 ?>
+                                <input type="hidden" name="stock_id" value="<?= (int)$row['id'] ?>">
+                                <button type="submit" name="btn_update_stock" style="background:#7a0000; color:#fff; border:none; padding:8px 16px; border-radius:6px; font-weight:600; cursor:pointer;">Update</button>
+                            </form>
                         </td>
-                    </form>
                 </tr>
                 <?php endforeach; endif; ?>
             </tbody>

@@ -3,10 +3,7 @@
 // pool, not a personal roster — so this lists every donor with their blood
 // group and current 56-day eligibility. Admins and officers both use it.
 require_once 'config/db.php';
-if (empty($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'officer'], true)) {
-    header('Location: login.php');
-    exit;
-}
+bl_require_role(['admin', 'officer']);
 
 $ops = new operations();
 $conn = $db->connection;
@@ -18,8 +15,8 @@ $res = mysqli_query($conn,
 if ($res) { while ($r = mysqli_fetch_assoc($res)) { $donors[] = $r; } }
 
 $backLink = ($_SESSION['role'] === 'admin') ? 'dashboard.php' : 'officer_dashboard.php';
-include 'inc/header.php';
 ?>
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 <body>

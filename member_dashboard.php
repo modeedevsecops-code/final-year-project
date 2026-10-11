@@ -1,15 +1,8 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
+include 'config/db.php';
 
 // Members only (a member is a unified donor + recipient account).
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
-    header("Location: login.php");
-    exit();
-}
-
-include 'config/db.php';
+bl_require_role('member');
 
 $member_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 0;
 
@@ -51,7 +44,7 @@ $waitDays = $ops->days_until_eligible($member['last_donation_date'] ?? null);
           <div class="welcome-banner">
             <span class="badge-pill">MEMBER DASHBOARD</span>
             <h1>Welcome back, <?php echo htmlspecialchars($userName); ?>!</h1>
-            <p>Member ID: <strong><?php echo htmlspecialchars($memberId); ?></strong> &nbsp;|&nbsp; Blood group: <strong><?php echo htmlspecialchars($bloodGrp); ?></strong> &nbsp;|&nbsp; Donate, request blood, and find nearby banks — all from one account.</p>
+            <p>Member ID: <strong><?php echo htmlspecialchars($memberId); ?></strong> &nbsp;|&nbsp; Blood group: <strong><?php echo htmlspecialchars($bloodGrp); ?></strong> &nbsp;|&nbsp; <a href="profile.php" style="color:#fff; text-decoration:underline;">Edit profile</a></p>
           </div>
 
           <!-- Availability -->
@@ -101,7 +94,7 @@ $waitDays = $ops->days_until_eligible($member['last_donation_date'] ?? null);
               <div class="quick-card">
                 <div class="quick-icon"><i class="fas fa-tint"></i></div>
                 <h3>Donate Blood</h3>
-                <p>Check your eligibility and record a donation at your nearest blood bank.</p>
+                <p>Check your 56-day eligibility and how donating works.</p>
                 <a href="donation_form.php" class="btn btn-danger mt-auto">Donate Now</a>
               </div>
             </div>
@@ -144,10 +137,10 @@ $waitDays = $ops->days_until_eligible($member['last_donation_date'] ?? null);
 
             <div class="col-md-4 col-sm-6">
               <div class="quick-card">
-                <div class="quick-icon"><i class="fas fa-sign-out-alt"></i></div>
-                <h3>Logout</h3>
-                <p>Sign out of your BloodLink member account securely.</p>
-                <a href="logout.php" class="btn btn-outline-secondary mt-auto">Logout</a>
+                <div class="quick-icon"><i class="fas fa-award"></i></div>
+                <h3>My Donations</h3>
+                <p>See every donation recorded for you and when you can give again.</p>
+                <a href="my_donations.php" class="btn btn-outline-danger mt-auto">View Donations</a>
               </div>
             </div>
 

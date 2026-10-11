@@ -1,11 +1,7 @@
 <?php
-session_start();
 require_once 'config/db.php'; // adjust path if your db include has a different name/location
 
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header("Location: login.php");
-    exit();
-}
+bl_require_role('admin');
 
 // --- Helper: safe count query (won't crash if a table/query fails) ---
 function safe_count($db, $sql) {

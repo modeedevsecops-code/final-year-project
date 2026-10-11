@@ -1,13 +1,8 @@
 <?php
-session_start();
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
 // Only donors (donors) can access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
-    header("Location: user-login.php");
-    exit;
-}
+bl_require_role('member');
 
 $donor_id = isset($_SESSION['user_id']) ? intval($_SESSION['user_id']) : 0;
 $dbb = new operations();
@@ -28,6 +23,7 @@ if ($all_notices_res) {
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 <head>

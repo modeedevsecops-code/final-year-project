@@ -1,15 +1,8 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
 // Donors only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'member') {
-    header("Location: login.php");
-    exit;
-}
+bl_require_role('member');
 
 // Fetch all emergency alerts, most recent first
 global $db;
@@ -26,6 +19,7 @@ if ($result) {
     }
 }
 ?>
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 <head>

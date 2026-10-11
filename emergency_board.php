@@ -3,9 +3,7 @@
 // (severity + blood-type rarity + time pressure), with live countdown timers.
 // Admin/officer facing.
 require_once 'config/functions.php';
-if (empty($_SESSION['Active']) || !in_array($_SESSION['role'] ?? '', ['admin','officer'], true)) {
-    header('Location: login.php'); exit;
-}
+bl_require_role(['admin', 'officer']);
 $ops      = new operations();
 $requests = $ops->get_emergency_requests();
 $isOfficer = ($_SESSION['role'] ?? '') === 'officer';
@@ -22,8 +20,8 @@ function eb_severity_badge($sev) {
     return '<span class="badge-pill" style="background:' . $bg . ';color:' . $fg . ';">' . $label . '</span>';
 }
 
-include 'inc/header.php';
 ?>
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 <body>

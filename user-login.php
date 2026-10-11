@@ -1,5 +1,6 @@
 <?php
 require_once('config/db.php');
+if (!empty($_SESSION['role'])) { header('Location: ' . bl_home_for_role($_SESSION['role'])); exit; }
 $dbb = new operations();
 $dbb->user_login();
 ?>
@@ -36,15 +37,16 @@ $dbb->user_login();
                                 <label class="form-label">Select Role</label>
                                 <select name="role" id="roleSelect" class="form-select" required onchange="toggleFields()">
                                     <option value="">-- Choose Role --</option>
-                                    <option value="member">Member (Donor / Recipient)</option>
-                                    <option value="officer">Hospital Officer</option>
+                                    <?php $selRole = $_POST['role'] ?? ($_GET['role'] ?? ''); ?>
+                                    <option value="member" <?= $selRole === 'member' ? 'selected' : '' ?>>Member (Donor / Recipient)</option>
+                                    <option value="officer" <?= $selRole === 'officer' ? 'selected' : '' ?>>Hospital Officer</option>
                                 </select>
                             </div>
 
                             <!-- Member Fields -->
                             <div id="memberField" style="display:none;">
                                 <div class="form-group mb-3">
-                                    <input type="text" name="member_login" id="member_login_field" class="form-control" placeholder="Email or Member ID">
+                                    <input type="text" name="member_login" id="member_login_field" class="form-control" placeholder="Email or Member ID" value="<?= htmlspecialchars($_POST['member_login'] ?? '') ?>">
                                 </div>
                                 <div class="form-group mb-3">
                                     <input type="password" name="member_password" id="member_pass_field" class="form-control" placeholder="Password">
@@ -54,14 +56,16 @@ $dbb->user_login();
                             <!-- Hospital Officer Fields -->
                             <div id="officerFields" style="display:none;">
                                 <div class="form-group mb-3">
-                                    <input type="email" name="email" id="email_field" class="form-control" placeholder="Officer Email">
+                                    <input type="email" name="email" id="email_field" class="form-control" placeholder="Officer Email" value="<?= htmlspecialchars($_POST['email'] ?? '') ?>">
                                 </div>
                                 <div class="form-group mb-3">
                                     <input type="password" name="password" id="pass_field" class="form-control" placeholder="Password">
                                 </div>
                             </div>
 
-                            <button type="submit" class="btn btn-danger w-100 mb-4" name="btn_user_login">Login</button>
+                            <button type="submit" class="btn btn-danger w-100 mb-3" name="btn_user_login">Login</button>
+                            <p class="text-center small mb-1">New to BloodLink? <a href="register.php" class="text-danger fw-bold">Create a member account</a></p>
+                            <p class="text-center small"><a href="index.php" class="text-muted">&larr; Back to home</a></p>
                         </form>
                     </div>
                 </div>
@@ -100,6 +104,7 @@ function toggleFields() {
         passField.required = true;
     }
 }
+toggleFields();
 </script>
 
 <?php include 'inc/main_js.php'; ?>

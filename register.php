@@ -1,7 +1,6 @@
 <?php
-session_start();
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+require_once 'config/functions.php';
+if (!empty($_SESSION['role'])) { header('Location: ' . bl_home_for_role($_SESSION['role'])); exit; }
 include 'inc/header.php';
 ?>
 <!DOCTYPE html>

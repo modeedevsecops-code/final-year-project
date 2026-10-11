@@ -1,13 +1,8 @@
 <?php
-session_start();
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
 // Allow both admin and hospital officers to post emergency alerts
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'officer'])) {
-    header("Location: login.php");
-    exit;
-}
+bl_require_role(['admin', 'officer']);
 
 $is_admin = ($_SESSION['role'] === 'admin');
 
@@ -25,8 +20,8 @@ $dbb = new operations();
 $post_success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_post_notice'])) {
     bl_csrf_check();      // BL-14
-    $title   = htmlspecialchars(trim($_POST['title']));
-    $message = htmlspecialchars(trim($_POST['message']));
+    $title   = trim($_POST['title'] ?? '');
+    $message = trim($_POST['message'] ?? '');
 
     if (!empty($title) && !empty($message)) {
         // Admin posts have no hospital_workers row, so officer_id is NULL for them.
@@ -38,7 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_post_notice'])) {
             mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
         }
-        $post_success = "Emergency alert posted successfully!";
+        header('Location: notices.php?posted=1');
+        exit;
     }
 }
 
@@ -65,6 +61,7 @@ if ($is_admin) {
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 <head>
@@ -88,8 +85,12 @@ if ($is_admin) {
         ?>
     </p>
 
-    <?php if (!empty($post_success)): ?>
-        <div class="alert alert-success text-center"><?php echo $post_success; ?> ✅</div>
+    <?php if (isset($_GET['posted'])): ?>
+        <div class="alert alert-success text-center">Emergency alert posted successfully!</div>
+    <?php elseif (isset($_GET['deleted'])): ?>
+        <div class="alert alert-success text-center">Alert deleted.</div>
+    <?php elseif (isset($_GET['denied'])): ?>
+        <div class="alert alert-warning text-center">You can only delete alerts you posted.</div>
     <?php endif; ?>
 
     <!-- Post Alert Form -->
@@ -154,11 +155,12 @@ if ($is_admin) {
                                     <td><?php echo htmlspecialchars($notice['message']); ?></td>
                                     <td><?php echo date('d M Y, H:i', strtotime($notice['created_at'])); ?></td>
                                     <td>
-                                        <a href="delete_notices.php?id=<?php echo $notice['notice_id']; ?>"
-                                           class="btn btn-danger btn-sm"
-                                           onclick="return confirm('Are you sure you want to delete this emergency alert?')">
-                                            Delete
-                                        </a>
+                                        <form method="POST" action="delete_notices.php" class="d-inline"
+                                              onsubmit="return confirm('Are you sure you want to delete this emergency alert?')">
+                                            <?php bl_csrf_field(); ?>
+                                            <input type="hidden" name="notice_id" value="<?= (int)$notice['notice_id'] ?>">
+                                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                        </form>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

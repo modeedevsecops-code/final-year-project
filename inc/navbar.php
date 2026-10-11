@@ -81,10 +81,18 @@ switch ($_SESSION['role'] ?? '') {
         <span>BloodLink</span>
     </div>
     <div class="topbar-right">
-        <div class="topbar-bell">
+        <?php
+        $alertsLink = ($_SESSION['role'] ?? '') === 'member' ? 'emergency_alerts.php' : 'notices.php';
+        $recentAlert = false;
+        if (isset($db) && $db->connection) {
+            $ra = mysqli_query($db->connection, "SELECT 1 FROM notices WHERE created_at >= NOW() - INTERVAL 48 HOUR LIMIT 1");
+            $recentAlert = $ra && mysqli_num_rows($ra) > 0;
+        }
+        ?>
+        <a class="topbar-bell" href="<?= $alertsLink ?>" title="<?= $recentAlert ? 'New emergency alerts in the last 48 hours' : 'Emergency alerts' ?>">
             <i class="fas fa-bell"></i>
-            <span class="dot"></span>
-        </div>
+            <?php if ($recentAlert): ?><span class="dot"></span><?php endif; ?>
+        </a>
         <div class="topbar-user" id="topbarUser" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
             <div class="topbar-avatar"><?php echo htmlspecialchars($avatarLetter); ?></div>
             <span class="topbar-username"><?php echo htmlspecialchars($displayName); ?></span>
@@ -98,6 +106,9 @@ switch ($_SESSION['role'] ?? '') {
                     </div>
                 </div>
                 <a class="topbar-menu-item" href="<?php echo $dashLinkForRole ?? '#'; ?>"><i class="fas fa-gauge"></i> Dashboard</a>
+                <?php if (($_SESSION['role'] ?? '') === 'member'): ?>
+                <a class="topbar-menu-item" href="profile.php"><i class="fas fa-user"></i> My Profile</a>
+                <?php endif; ?>
                 <a class="topbar-menu-item topbar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
         </div>
@@ -134,6 +145,7 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
             <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
             <li><a class="nav-link <?php echo $current_page=='find_donors.php'?'active':''; ?>" href="find_donors.php"><i class="fas fa-magnifying-glass"></i> Find Donors</a></li>
+            <li><a class="nav-link <?php echo $current_page=='record_donation.php'?'active':''; ?>" href="record_donation.php"><i class="fas fa-tint"></i> Record Donation</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
             <li class="sidebar-sep"></li>
@@ -145,8 +157,10 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='donation_form.php'?'active':''; ?>" href="donation_form.php"><i class="fas fa-tint"></i> Donate Blood</a></li>
             <li><a class="nav-link <?php echo $current_page=='request_blood.php'?'active':''; ?>" href="request_blood.php"><i class="fas fa-hand-holding-medical"></i> Request Blood</a></li>
             <li><a class="nav-link <?php echo $current_page=='request_history.php'?'active':''; ?>" href="request_history.php"><i class="fas fa-history"></i> Request History</a></li>
+            <li><a class="nav-link <?php echo $current_page=='my_donations.php'?'active':''; ?>" href="my_donations.php"><i class="fas fa-award"></i> My Donations</a></li>
             <li><a class="nav-link <?php echo $current_page=='emergency_alerts.php'?'active':''; ?>" href="emergency_alerts.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Nearby Banks</a></li>
+            <li><a class="nav-link <?php echo $current_page=='profile.php'?'active':''; ?>" href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php } ?>
