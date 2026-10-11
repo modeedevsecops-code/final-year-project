@@ -33,6 +33,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_post_notice'])) {
             mysqli_stmt_execute($stmt);
             mysqli_stmt_close($stmt);
         }
+        $r = mysqli_query($db->connection, "SELECT member_id FROM members");
+        bl_notify($db->connection, 'member', array_column(mysqli_fetch_all($r, MYSQLI_ASSOC), 'member_id'),
+                  'alert', 'Emergency alert: ' . mb_substr($title, 0, 150), mb_substr($message, 0, 300), 'emergency_alerts.php');
         header('Location: notices.php?posted=1');
         exit;
     }

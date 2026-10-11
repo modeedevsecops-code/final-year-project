@@ -11,7 +11,7 @@ $recipientId = $_SESSION['member_id'] ?? $_SESSION['user_id'] ?? null; // the me
 $recipientName = $_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Recipient';
 
 $errors = [];
-$success = false;
+$success = isset($_GET['submitted']);
 
 // recipient_id is now declared in db/schema.sql. The runtime ALTER that used to
 // live here used MariaDB-only "ADD COLUMN IF NOT EXISTS" syntax, which is a hard
@@ -84,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
 
         if (mysqli_stmt_execute($stmt)) {
-            $success = true;
+            $newRequestId = mysqli_insert_id($db_conn);
 
             if ($urgencyLevel === 'Critical Emergency') {
                 $title = "Emergency: $bloodGroup blood needed at $hospitalName";
@@ -94,7 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 mysqli_stmt_bind_param($alertStmt, "ss", $title, $message);
                 mysqli_stmt_execute($alertStmt);
+                // Every member who could donate right now hears about it directly.
+                bl_notify($db_conn, 'member', bl_eligible_donor_ids($db_conn, $bloodGroup, $recipientId), 'emergency',
+                          "Emergency: $bloodGroup needed at $hospitalName", "$unitsNeeded unit(s) needed urgently. You are a compatible, eligible donor — please contact the blood bank.", 'emergency_alerts.php');
             }
+
+            $summary = "$urgencyLevel · $unitsNeeded unit(s) of $bloodGroup for $patientName at $hospitalName.";
+            bl_notify($db_conn, 'officer', bl_officer_ids($db_conn), 'request_new', "New $bloodGroup request", $summary, "match_donor.php?request_id=$newRequestId");
+            bl_notify($db_conn, 'admin', bl_admin_ids($db_conn), 'request_new', "New $bloodGroup request", $summary, 'emergency_board.php');
+            bl_notify($db_conn, 'member', $recipientId, 'request_status', 'Request received', "Your $bloodGroup request for $patientName is Pending — officers have been notified.", 'request_history.php');
+
+            header('Location: request_blood.php?submitted=1');
+            exit;
         } else {
             $errors[] = "Something went wrong saving your request. Please try again.";
         }

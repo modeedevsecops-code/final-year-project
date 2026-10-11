@@ -14,17 +14,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_register_member']
   if ($errors) {
     $msg = bl_errors_html($errors);
   } else {
-    list(, $code, $geocoded) = bl_create_member($db->connection, $f);
-    $old = [];
-    $msg = '<div class="alert alert-success text-center">Registration successful! Your Member ID is <strong>' . htmlspecialchars($code)
-         . '</strong>. You can now <a href="user-login.php?role=member">log in</a> with your email or Member ID.'
-         . (($f['address'] !== '' && !$geocoded) ? '<br><small>We couldn\'t find your address on the map — you can update it later from My Profile.</small>' : '')
-         . '</div>';
+    list($new_id, $code, $geocoded) = bl_create_member($db->connection, $f);
+    bl_notify($db->connection, 'admin', bl_admin_ids($db->connection), 'member_new', 'New member registered',
+              $f['name'] . " ($code, " . $f['blood_group'] . ") joined BloodLink.", "edit_member.php?id=$new_id");
+    bl_notify($db->connection, 'member', $new_id, 'member_new', 'Welcome to BloodLink',
+              'Set your donor availability on your dashboard so officers can match you to emergencies.', 'member_dashboard.php');
+    $_SESSION['registered'] = ['code' => $code, 'name' => $f['name'], 'geocoded' => $geocoded || $f['address'] === ''];
+    header('Location: register.php?done=1');
+    exit;
   }
 }
 $v = function ($k) use (&$old) { return htmlspecialchars((string)($old[$k] ?? '')); };
 ?>
 
+<?php $reg = isset($_GET['done']) ? ($_SESSION['registered'] ?? null) : null; unset($_SESSION['registered']); ?>
+<?php if ($reg): ?>
+<div class="card border-0 shadow-lg">
+  <div class="card-body p-4 text-center">
+    <div style="font-size:2.4rem; color:#2c8a4a;"><i class="fas fa-circle-check"></i></div>
+    <h4 class="fw-bold mb-2">Welcome to BloodLink, <?= htmlspecialchars($reg['name']) ?>!</h4>
+    <p class="mb-1">Your Member ID is</p>
+    <p style="font-size:1.6rem; font-weight:700; letter-spacing:.06em; color:#7a0000;"><?= htmlspecialchars($reg['code']) ?></p>
+    <p class="text-muted">Log in with your email address or this Member ID and the password you chose.</p>
+    <?php if (!$reg['geocoded']): ?>
+      <div class="alert alert-warning small">We couldn't find your address on the map. Update it under <strong>My Profile</strong> after logging in so you can be matched to nearby emergencies.</div>
+    <?php endif; ?>
+    <a href="user-login.php?role=member" class="btn btn-danger px-5">Log in now</a>
+  </div>
+</div>
+<?php else: ?>
 <div class="card border-0 shadow-lg">
   <div class="card-header bg-danger text-white py-3">
     <h4 class="mb-0 text-white text-center">🩸 Member Registration</h4>
@@ -103,3 +121,4 @@ $v = function ($k) use (&$old) { return htmlspecialchars((string)($old[$k] ?? ''
     </form>
   </div>
 </div>
+<?php endif; ?>

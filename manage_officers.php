@@ -28,6 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
         header('Location: manage_officers.php?blocked=' . (int)$has['n']);
         exit;
     }
+    mysqli_query($conn, "DELETE FROM notifications WHERE recipient_role = 'officer' AND recipient_id = $del_id");
     if ($stmt = mysqli_prepare($conn, "DELETE FROM hospital_workers WHERE worker_id = ?")) {
         mysqli_stmt_bind_param($stmt, "i", $del_id);
         mysqli_stmt_execute($stmt);

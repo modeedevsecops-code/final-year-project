@@ -251,6 +251,7 @@ public function delete_donor() {
             header('Location: manage_members.php');
             exit;
         }
+        mysqli_query($db->connection, "DELETE FROM notifications WHERE recipient_role = 'member' AND recipient_id = $member_id");
         if (mysqli_query($db->connection, "DELETE FROM members WHERE member_id = $member_id")) {
             $this->set_message('<div class="alert alert-success">Member deleted successfully.</div>');
         } else {
@@ -643,6 +644,19 @@ public function update_donor($member_id) {
             }
 
             mysqli_commit($conn);
+
+            if ($request_id) {
+                bl_notify($conn, 'member', $donor_id, 'donation', 'Thank you — your donation was recorded',
+                    "$units unit(s) of $bg for " . $request['patient_name'] . " at " . $request['hospital_name'] . ". You can donate again in 56 days.", 'my_donations.php');
+                if ($recipient_id) {
+                    bl_notify($conn, 'member', $recipient_id, 'request_status', 'Your blood request is ' . $new_status,
+                        "$units unit(s) of $bg donated for " . $request['patient_name'] . ($new_status === 'Fulfilled' ? ' — the request is now fully covered.' : ' — more units are still needed.'), 'request_history.php');
+                }
+            } else {
+                bl_notify($conn, 'member', $donor_id, 'donation', 'Thank you — your donation was recorded',
+                    "$units unit(s) of $bg added to the blood bank's stock. You can donate again in 56 days.", 'my_donations.php');
+            }
+
             $msg = $request_id
                 ? "Donation recorded ($units unit(s) of $bg). Request is now $new_status."
                 : "Walk-in donation recorded: $units unit(s) of $bg added to your bank's stock.";
@@ -1056,6 +1070,17 @@ if (!function_exists('bl_sync_stock_alert')) {
                 WHERE NOT EXISTS (SELECT 1 FROM stock_alerts WHERE blood_bank_id = ? AND blood_type = ? AND status = 'active')");
             $u = (int)$s['units_available']; $t = (int)$s['low_stock_threshold'];
             mysqli_stmt_bind_param($stmt, "isiiis", $bank_id, $blood_type, $u, $t, $bank_id, $blood_type);
+            mysqli_stmt_execute($stmt);
+            $raised = mysqli_stmt_affected_rows($stmt) > 0;
+            mysqli_stmt_close($stmt);
+            if ($raised) {
+                $b = mysqli_fetch_assoc(mysqli_query($conn, "SELECT name FROM blood_banks WHERE bank_id = $bank_id"));
+                $title = "Low stock: $blood_type at " . ($b['name'] ?? 'a blood bank');
+                $body  = "$u unit(s) left — below the threshold of $t.";
+                bl_notify($conn, 'officer', bl_officer_ids($conn, $bank_id), 'low_stock', $title, $body, 'officer_dashboard.php');
+                bl_notify($conn, 'admin', bl_admin_ids($conn), 'low_stock', $title, $body, "manage_blood_stock.php?bank=$bank_id");
+            }
+            return;
         } else {
             $stmt = mysqli_prepare($conn, "UPDATE stock_alerts SET status = 'resolved', resolved_at = NOW()
                                            WHERE blood_bank_id = ? AND blood_type = ? AND status = 'active'");
@@ -1115,5 +1140,113 @@ if (!function_exists('bl_create_officer')) {
         mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
         return [true, '<div class="alert alert-success text-center">Hospital Officer ' . htmlspecialchars($name) . ' added.</div>'];
+    }
+}
+
+// ===================== NOTIFICATIONS (the bell) =====================
+// One row per recipient. recipient_role + recipient_id identify the user:
+// admin → login.user_id, officer → hospital_workers.worker_id, member → members.member_id.
+
+// The signed-in user's [role, id], or [null, 0] when logged out.
+if (!function_exists('bl_current_user')) {
+    function bl_current_user() {
+        $role = $_SESSION['role'] ?? null;
+        if ($role === 'admin')   return ['admin',   intval($_SESSION['user_id'] ?? ($_SESSION['user'] ?? 0))];
+        if ($role === 'officer') return ['officer', intval($_SESSION['officer_id'] ?? 0)];
+        if ($role === 'member')  return ['member',  intval($_SESSION['member_id'] ?? 0)];
+        return [null, 0];
+    }
+}
+
+if (!function_exists('bl_notify')) {
+    function bl_notify($conn, $role, $ids, $type, $title, $body = null, $link = null) {
+        $stmt = mysqli_prepare($conn, "INSERT INTO notifications (recipient_role, recipient_id, type, title, body, link) VALUES (?, ?, ?, ?, ?, ?)");
+        foreach ((array)$ids as $id) {
+            $id = intval($id);
+            if (!$id) continue;
+            mysqli_stmt_bind_param($stmt, "sissss", $role, $id, $type, $title, $body, $link);
+            mysqli_stmt_execute($stmt);
+        }
+        mysqli_stmt_close($stmt);
+    }
+}
+
+// Ids of every active admin / every officer (optionally one bank's).
+if (!function_exists('bl_admin_ids')) {
+    function bl_admin_ids($conn) {
+        $r = mysqli_query($conn, "SELECT user_id FROM login WHERE PW_STATUS = 'Active'");
+        return $r ? array_column(mysqli_fetch_all($r, MYSQLI_ASSOC), 'user_id') : [];
+    }
+}
+if (!function_exists('bl_officer_ids')) {
+    function bl_officer_ids($conn, $bank_id = null) {
+        $where = $bank_id ? 'WHERE blood_bank_id = ' . intval($bank_id) : '';
+        $r = mysqli_query($conn, "SELECT worker_id FROM hospital_workers $where");
+        return $r ? array_column(mysqli_fetch_all($r, MYSQLI_ASSOC), 'worker_id') : [];
+    }
+}
+
+if (!function_exists('bl_unread_count')) {
+    function bl_unread_count($conn, $role, $id) {
+        $stmt = mysqli_prepare($conn, "SELECT COUNT(*) FROM notifications WHERE recipient_role = ? AND recipient_id = ? AND is_read = 0");
+        mysqli_stmt_bind_param($stmt, "si", $role, $id);
+        mysqli_stmt_execute($stmt);
+        $n = (int)mysqli_fetch_row(mysqli_stmt_get_result($stmt))[0];
+        mysqli_stmt_close($stmt);
+        return $n;
+    }
+}
+
+if (!function_exists('bl_notifications')) {
+    function bl_notifications($conn, $role, $id, $limit = 8) {
+        $limit = max(1, intval($limit));
+        $stmt = mysqli_prepare($conn, "SELECT notification_id, type, title, body, link, is_read, created_at FROM notifications
+                                       WHERE recipient_role = ? AND recipient_id = ? ORDER BY created_at DESC, notification_id DESC LIMIT $limit");
+        mysqli_stmt_bind_param($stmt, "si", $role, $id);
+        mysqli_stmt_execute($stmt);
+        $rows = mysqli_fetch_all(mysqli_stmt_get_result($stmt), MYSQLI_ASSOC);
+        mysqli_stmt_close($stmt);
+        return $rows;
+    }
+}
+
+if (!function_exists('bl_time_ago')) {
+    function bl_time_ago($ts) {
+        $d = time() - strtotime($ts);
+        if ($d < 60) return 'just now';
+        if ($d < 3600) return floor($d / 60) . ' min ago';
+        if ($d < 86400) return floor($d / 3600) . ' h ago';
+        if ($d < 604800) return floor($d / 86400) . ' d ago';
+        return date('d M Y', strtotime($ts));
+    }
+}
+
+// Notification links are always pages inside this app.
+if (!function_exists('bl_safe_link')) {
+    function bl_safe_link($link) {
+        return (is_string($link) && preg_match('/^[a-z0-9_\-]+\.php(\?[A-Za-z0-9_=&%\-]*)?$/', $link)) ? $link : null;
+    }
+}
+
+// Members who can donate to a request for $blood_group right now (compatible,
+// outside the 56-day window, available), excluding the requester.
+if (!function_exists('bl_eligible_donor_ids')) {
+    function bl_eligible_donor_ids($conn, $blood_group, $exclude_member_id = 0) {
+        $ops = new operations();
+        $types = $ops->get_compatible_donor_types($blood_group);
+        if (!$types) return [];
+        $in = "'" . implode("','", array_map(function ($t) use ($conn) { return mysqli_real_escape_string($conn, $t); }, $types)) . "'";
+        $r = mysqli_query($conn, "SELECT member_id FROM members
+                                  WHERE blood_group IN ($in) AND is_available = 1 AND member_id <> " . intval($exclude_member_id) . "
+                                    AND (last_donation_date IS NULL OR DATEDIFF(CURDATE(), last_donation_date) >= 56)");
+        return $r ? array_column(mysqli_fetch_all($r, MYSQLI_ASSOC), 'member_id') : [];
+    }
+}
+
+if (!function_exists('bl_notification_icon')) {
+    function bl_notification_icon($type) {
+        return ['request_new' => 'fa-hand-holding-medical', 'request_status' => 'fa-clipboard-check', 'donation' => 'fa-tint',
+                'emergency' => 'fa-triangle-exclamation', 'low_stock' => 'fa-flask', 'member_new' => 'fa-user-plus',
+                'contact' => 'fa-envelope', 'alert' => 'fa-bell'][$type] ?? 'fa-bell';
     }
 }

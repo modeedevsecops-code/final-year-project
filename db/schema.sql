@@ -7,7 +7,8 @@
 --  them (Nominatim + OSRM).
 --
 --  Tables: login, blood_banks, hospital_workers, members,
---          blood_requests, notices, donations, blood_stock, stock_alerts.
+--          blood_requests, notices, donations, blood_stock, stock_alerts,
+--          notifications, contact_messages.
 --
 --  A `member` is a single unified account that BOTH donates (blood group,
 --  availability, 56-day clock) AND files blood requests — mirroring a real
@@ -21,8 +22,20 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
 
+-- Leftovers from the earlier student-logbook (SIWES) version of this project.
+-- Nothing in BloodLink uses them; dropping them keeps the database honest.
+DROP TABLE IF EXISTS `attendance`;
+DROP TABLE IF EXISTS `chat_messages`;
+DROP TABLE IF EXISTS `logbook_entries`;
+DROP TABLE IF EXISTS `projects`;
+DROP TABLE IF EXISTS `seminar`;
+DROP TABLE IF EXISTS `staff`;
+DROP TABLE IF EXISTS `students`;
+DROP TABLE IF EXISTS `weekly_summaries`;
 DROP TABLE IF EXISTS `allocation`;
 DROP TABLE IF EXISTS `timetable`;
+DROP TABLE IF EXISTS `contact_messages`;
+DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `stock_alerts`;
 DROP TABLE IF EXISTS `blood_stock`;
 DROP TABLE IF EXISTS `donations`;
@@ -221,5 +234,39 @@ CREATE TABLE `stock_alerts` (
     REFERENCES `blood_banks` (`bank_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Low-stock alerts raised against blood_stock';
+
+-- ------------------------------------------------------- notifications ----
+-- Per-user in-app notifications behind the bell in the top bar. recipient_role
+-- + recipient_id point at login.user_id, hospital_workers.worker_id or
+-- members.member_id (one table for all three roles, so no single FK).
+CREATE TABLE `notifications` (
+  `notification_id` INT(11) NOT NULL AUTO_INCREMENT,
+  `recipient_role`  ENUM('admin','officer','member') NOT NULL,
+  `recipient_id`    INT(11) NOT NULL,
+  `type`            VARCHAR(30)  NOT NULL COMMENT 'request_new / request_status / donation / emergency / low_stock / member_new / contact / alert',
+  `title`           VARCHAR(200) NOT NULL,
+  `body`            VARCHAR(500) DEFAULT NULL,
+  `link`            VARCHAR(255) DEFAULT NULL COMMENT 'Relative page to open',
+  `is_read`         TINYINT(1)   NOT NULL DEFAULT 0,
+  `created_at`      TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`notification_id`),
+  KEY `idx_notif_recipient` (`recipient_role`, `recipient_id`, `is_read`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='In-app notifications for admins, officers and members';
+
+-- ---------------------------------------------------- contact_messages ----
+-- Messages sent from the public Contact page; read in the admin Messages inbox.
+CREATE TABLE `contact_messages` (
+  `message_id` INT(11) NOT NULL AUTO_INCREMENT,
+  `name`       VARCHAR(100) NOT NULL,
+  `email`      VARCHAR(100) NOT NULL,
+  `subject`    VARCHAR(150) NOT NULL,
+  `message`    TEXT NOT NULL,
+  `status`     ENUM('new','read') NOT NULL DEFAULT 'new',
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`message_id`),
+  KEY `idx_contact_status` (`status`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Public contact-form messages';
 
 SET FOREIGN_KEY_CHECKS = 1;

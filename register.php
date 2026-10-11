@@ -1,6 +1,10 @@
 <?php
 require_once 'config/functions.php';
 if (!empty($_SESSION['role'])) { header('Location: ' . bl_home_for_role($_SESSION['role'])); exit; }
+// Run the form (and its redirect after a successful sign-up) before any output.
+ob_start();
+include 'register_member.php';
+$registration_form = ob_get_clean();
 include 'inc/header.php';
 ?>
 <!DOCTYPE html>
@@ -26,7 +30,7 @@ include 'inc/header.php';
                                     <br><small>Hospital Officer accounts are created by system administrators only.</small>
                                 </p>
 
-                                <?php include 'register_member.php'; ?>
+                                <?= $registration_form ?>
                             </div>
                         </div>
                     </div>

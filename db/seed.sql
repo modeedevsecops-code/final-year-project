@@ -24,6 +24,8 @@
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+TRUNCATE TABLE `notifications`;
+TRUNCATE TABLE `contact_messages`;
 TRUNCATE TABLE `stock_alerts`;
 TRUNCATE TABLE `blood_stock`;
 TRUNCATE TABLE `donations`;
@@ -127,3 +129,19 @@ UPDATE members SET availability_schedule='emergencies', contact_preference='phon
 UPDATE blood_requests SET severity='critical', required_within_hours=3,  priority_score=95 WHERE request_id = 1;
 UPDATE blood_requests SET severity='severe',   required_within_hours=8,  priority_score=70 WHERE request_id = 2;
 UPDATE blood_requests SET severity='moderate', required_within_hours=48, priority_score=40 WHERE request_id = 3;
+
+-- ------------------------------------------------- notifications (demo) ---
+-- A few unread notifications so the bell has something to show on first login.
+INSERT INTO `notifications` (`recipient_role`,`recipient_id`,`type`,`title`,`body`,`link`) VALUES
+('officer', 1, 'request_new', 'New O- request', 'Critical Emergency · 2 unit(s) of O- for Hassan Umar at Barau Dikko Teaching Hospital.', 'match_donor.php?request_id=1'),
+('officer', 2, 'request_new', 'New O- request', 'Critical Emergency · 2 unit(s) of O- for Hassan Umar at Barau Dikko Teaching Hospital.', 'match_donor.php?request_id=1'),
+('officer', 1, 'low_stock',   'Low stock: O- at Barau Dikko Teaching Hospital', '7 unit(s) left — below the threshold of 8.', 'officer_dashboard.php'),
+('admin',   1, 'low_stock',   'Low stock: A- at Barau Dikko Teaching Hospital', '2 unit(s) left — below the threshold of 5.', 'manage_blood_stock.php?bank=1'),
+('admin',   1, 'contact',     'New message: Partnership enquiry', 'From Dr. Bala Usman (bala.usman@example.test).', 'messages.php'),
+('member',  1, 'emergency',   'Emergency: O- needed at Barau Dikko Teaching Hospital', '2 unit(s) needed urgently. You are a compatible, eligible donor — please contact the blood bank.', 'emergency_alerts.php'),
+('member', 10, 'request_status', 'Request received', 'Your O- request for Hassan Umar is Pending — officers have been notified.', 'request_history.php');
+
+INSERT INTO `contact_messages` (`name`,`email`,`subject`,`message`) VALUES
+('Dr. Bala Usman', 'bala.usman@example.test', 'Partnership enquiry',
+ 'Our hospital in Zaria would like to register as a partner blood bank. Who should we speak to about getting set up on BloodLink?');
+

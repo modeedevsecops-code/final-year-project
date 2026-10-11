@@ -9,7 +9,7 @@ function safe_count($db, $sql) {
     return $result ? ($result->fetch_assoc()['c'] ?? 0) : 0;
 }
 
-// --- Summary stats (using real table names from donor_app.sql) ---
+// --- Summary stats ---
 $total_donors     = safe_count($db, "SELECT COUNT(*) AS c FROM members");
 $total_officers   = safe_count($db, "SELECT COUNT(*) AS c FROM hospital_workers");
 $pending_requests = safe_count($db, "SELECT COUNT(*) AS c FROM blood_requests WHERE status = 'Pending'");
