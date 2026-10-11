@@ -499,7 +499,7 @@ public function update_donor($member_id) {
             $radius_clause = ($radius_km !== null && is_numeric($radius_km))
                 ? " AND $distance_expr <= " . (float)$radius_km : "";
             $query = "
-                SELECT member_id AS donor_id, name, email, phone, blood_group, last_donation_date, is_available,
+                SELECT member_id AS donor_id, name, member_code, email, phone, blood_group, last_donation_date, is_available,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,
@@ -514,7 +514,7 @@ public function update_donor($member_id) {
             ";
         } else {
             $query = "
-                SELECT member_id AS donor_id, name, email, phone, blood_group, last_donation_date, is_available,
+                SELECT member_id AS donor_id, name, member_code, email, phone, blood_group, last_donation_date, is_available,
                        latitude, longitude,
                        CASE WHEN last_donation_date IS NULL THEN 9999
                             ELSE DATEDIFF(CURDATE(), last_donation_date) END AS days_since_last_donation,

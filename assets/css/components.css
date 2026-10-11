@@ -1,0 +1,164 @@
+/* ==========================================================================
+   BloodLink page components (bl-*). Shared building blocks for the logged-in
+   pages: cards, stat tiles, badges, progress bars, a responsive data table and
+   step lists. Only new class names, so existing pages are unaffected.
+   ========================================================================== */
+
+:root {
+    --bl-red: #cc0000;
+    --bl-red-dark: #7a0000;
+    --bl-red-soft: #fdeaea;
+    --bl-ink: #1c1c1e;
+    --bl-muted: #6b7280;
+    --bl-line: #eeeeee;
+    --bl-green: #2c8a4a;
+    --bl-green-soft: #eaf6ee;
+    --bl-amber: #a9660a;
+    --bl-amber-soft: #fbf3e6;
+    --bl-blue: #1a5fb4;
+    --bl-blue-soft: #e8f1fb;
+    --bl-grey-soft: #f3f4f6;
+}
+
+/* ----- layout ----- */
+.bl-page { max-width: 1180px; }
+.bl-grid { display: grid; gap: 1.25rem; }
+.bl-grid-2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.bl-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.bl-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.bl-grid-main { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 1100px) { .bl-grid-4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 900px)  { .bl-grid-2, .bl-grid-3, .bl-grid-main { grid-template-columns: 1fr; } }
+@media (max-width: 520px)  { .bl-grid-4 { grid-template-columns: 1fr 1fr; } }
+
+/* ----- cards ----- */
+.bl-card {
+    background: #fff;
+    border: 1px solid var(--bl-line);
+    border-radius: 16px;
+    box-shadow: 0 6px 22px rgba(90, 20, 30, .06);
+    padding: 1.4rem 1.5rem;
+    margin-bottom: 1.25rem;
+}
+.bl-card-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.bl-card-title { font-size: 1.05rem; font-weight: 700; color: var(--bl-ink); margin: 0; display: flex; align-items: center; gap: .55rem; }
+.bl-card-title i { color: var(--bl-red); }
+.bl-card-sub { color: var(--bl-muted); font-size: .85rem; margin: .2rem 0 0; }
+.bl-eyebrow { font-size: .7rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--bl-muted); }
+
+/* ----- stat tiles ----- */
+.bl-stat { min-width: 0; background: #fff; border: 1px solid var(--bl-line); border-radius: 14px; padding: 1rem 1.1rem; display: flex; gap: .85rem; align-items: center; }
+.bl-stat-icon { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: var(--bl-red-soft); color: var(--bl-red-dark); font-size: 1.05rem; }
+.bl-stat-value { font-size: 1.3rem; font-weight: 700; color: var(--bl-ink); line-height: 1.15; }
+.bl-stat-label { font-size: .78rem; color: var(--bl-muted); }
+
+/* ----- badges ----- */
+.bl-badge { display: inline-flex; align-items: center; gap: .35rem; padding: .22rem .65rem; border-radius: 999px; font-size: .74rem; font-weight: 700; white-space: nowrap; line-height: 1.4; }
+.bl-badge-red    { background: var(--bl-red-soft);   color: #a30000; }
+.bl-badge-green  { background: var(--bl-green-soft); color: #1f6b38; }
+.bl-badge-amber  { background: var(--bl-amber-soft); color: var(--bl-amber); }
+.bl-badge-blue   { background: var(--bl-blue-soft);  color: var(--bl-blue); }
+.bl-badge-grey   { background: var(--bl-grey-soft);  color: #555; }
+.bl-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; display: inline-block; }
+
+/* The blood-group "drop" used for big group labels. */
+.bl-group { display: inline-flex; align-items: center; justify-content: center; min-width: 46px; height: 46px; padding: 0 .55rem; border-radius: 12px;
+            background: linear-gradient(135deg, #b30000, #7a0000); color: #fff; font-weight: 800; font-size: 1.1rem; letter-spacing: .02em; }
+.bl-group-sm { min-width: 38px; height: 30px; border-radius: 8px; font-size: .85rem; }
+.bl-group-lg { min-width: 72px; height: 72px; border-radius: 18px; font-size: 1.7rem; }
+
+/* ----- definition list (label / value rows) ----- */
+.bl-dl { display: grid; grid-template-columns: auto 1fr; gap: .55rem 1.25rem; margin: 0; font-size: .9rem; }
+.bl-dl dt { color: var(--bl-muted); font-weight: 500; }
+.bl-dl dd { margin: 0; color: var(--bl-ink); font-weight: 600; }
+
+/* ----- progress ----- */
+.bl-progress { height: 10px; border-radius: 999px; background: #f1e3e3; overflow: hidden; }
+.bl-progress > span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #e04b4b, #a30000); }
+.bl-progress.green > span { background: linear-gradient(90deg, #4cb06e, #2c8a4a); }
+.bl-progress-meta { display: flex; justify-content: space-between; font-size: .8rem; color: var(--bl-muted); margin-top: .4rem; }
+
+/* Small inline score bar used in tables. */
+.bl-score { display: inline-flex; align-items: center; gap: .5rem; font-weight: 700; font-size: .85rem; color: var(--bl-ink); }
+.bl-score-bar { width: 44px; height: 6px; border-radius: 999px; background: #eee; overflow: hidden; }
+.bl-score-bar > span { display: block; height: 100%; background: var(--bl-red); border-radius: 999px; }
+
+/* ----- buttons ----- */
+.bl-btn { display: inline-flex; align-items: center; justify-content: center; gap: .45rem; border: 1.5px solid transparent; border-radius: 10px;
+          padding: .55rem 1rem; font-weight: 700; font-size: .85rem; cursor: pointer; text-decoration: none; transition: background .15s, box-shadow .15s, border-color .15s; line-height: 1.2; }
+.bl-btn-primary { background: var(--bl-red); color: #fff; }
+.bl-btn-primary:hover { background: #a80000; color: #fff; box-shadow: 0 4px 12px rgba(204, 0, 0, .25); }
+.bl-btn-outline { background: #fff; color: var(--bl-red-dark); border-color: #e6c3c3; }
+.bl-btn-outline:hover { background: var(--bl-red-soft); color: var(--bl-red-dark); }
+.bl-btn-ghost { background: var(--bl-grey-soft); color: #666; cursor: not-allowed; }
+.bl-btn-sm { padding: .4rem .75rem; font-size: .8rem; border-radius: 8px; }
+
+/* ----- notices ----- */
+.bl-notice { display: flex; gap: .75rem; align-items: flex-start; border-radius: 12px; padding: .85rem 1rem; margin-bottom: 1.25rem; font-size: .9rem; }
+.bl-notice i { margin-top: .15rem; }
+.bl-notice-success { background: var(--bl-green-soft); border: 1px solid #bfe3cb; color: #1f6b38; }
+.bl-notice-error   { background: #fef2f2; border: 1px solid #f3b3b0; color: #9a1c1c; }
+.bl-notice-info    { background: var(--bl-blue-soft); border: 1px solid #c9dcf3; color: #1d4f8f; }
+.bl-notice-warn    { background: var(--bl-amber-soft); border: 1px solid #efdcb8; color: #7a4c06; }
+
+/* ----- data table (rows become cards on phones) ----- */
+.bl-table-wrap { overflow-x: auto; }
+.bl-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: .88rem; }
+.bl-table th { text-align: left; font-size: .7rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--bl-muted);
+               padding: .7rem .65rem; border-bottom: 1px solid var(--bl-line); background: #fafafa; white-space: nowrap; }
+.bl-table th:first-child { border-top-left-radius: 10px; } .bl-table th:last-child { border-top-right-radius: 10px; }
+.bl-table td { padding: .8rem .65rem; border-bottom: 1px solid #f3f3f3; vertical-align: middle; color: var(--bl-ink); }
+.bl-table tbody tr:hover td { background: #fffafa; }
+.bl-table tbody tr.is-muted td { color: #999; }
+.bl-person { display: flex; align-items: center; gap: .7rem; min-width: 180px; }
+.bl-avatar { width: 36px; height: 36px; flex: 0 0 36px; border-radius: 50%; background: var(--bl-red-soft); color: var(--bl-red-dark);
+             display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .9rem; }
+.bl-person strong { display: block; font-weight: 700; }
+.bl-person small { color: var(--bl-muted); font-size: .76rem; }
+.bl-contact { font-size: .8rem; color: var(--bl-muted); line-height: 1.45; }
+.bl-contact a { color: var(--bl-muted); text-decoration: none; } .bl-contact a:hover { color: var(--bl-red-dark); }
+
+@media (max-width: 760px) {
+    .bl-table-cards thead { display: none; }
+    .bl-table-cards, .bl-table-cards tbody, .bl-table-cards tr, .bl-table-cards td { display: block; width: 100%; }
+    .bl-table-cards tr { border: 1px solid var(--bl-line); border-radius: 12px; margin-bottom: .8rem; padding: .4rem .2rem; }
+    .bl-table-cards td { border: 0; padding: .4rem .8rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .bl-table-cards td[data-label]::before { content: attr(data-label); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--bl-muted); }
+    .bl-table-cards td.bl-td-full { display: block; }
+    .bl-table-cards .bl-cell-end { text-align: right; }
+}
+
+/* ----- confirm form inside a table row ----- */
+.bl-confirm { display: flex; align-items: center; gap: .5rem; justify-content: flex-end; }
+.bl-units { display: inline-flex; align-items: center; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff; }
+.bl-units input { width: 46px; border: 0 !important; text-align: center; font-weight: 700; padding: .35rem 0 !important; margin: 0 !important; -moz-appearance: textfield; }
+.bl-units input::-webkit-outer-spin-button, .bl-units input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.bl-units span { padding: 0 .55rem; font-size: .72rem; color: var(--bl-muted); background: #fafafa; align-self: stretch; display: flex; align-items: center; border-left: 1px solid #eee; }
+
+/* ----- numbered steps (horizontal on wide screens) ----- */
+.bl-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; counter-reset: step; }
+.bl-steps li { position: relative; padding: 1rem; border: 1px solid var(--bl-line); border-radius: 14px; background: #fff; }
+.bl-steps li::before { counter-increment: step; content: counter(step); width: 28px; height: 28px; border-radius: 50%; background: var(--bl-red); color: #fff;
+                       font-weight: 700; font-size: .85rem; display: flex; align-items: center; justify-content: center; margin-bottom: .6rem; }
+.bl-steps strong { display: block; font-size: .92rem; margin-bottom: .25rem; color: var(--bl-ink); }
+.bl-steps span { font-size: .82rem; color: var(--bl-muted); line-height: 1.45; display: block; }
+@media (max-width: 900px) { .bl-steps { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .bl-steps { grid-template-columns: 1fr; } }
+
+/* ----- check list ----- */
+.bl-checklist { list-style: none; padding: 0; margin: 0; }
+.bl-checklist li { display: flex; gap: .65rem; align-items: flex-start; padding: .45rem 0; font-size: .88rem; color: #333; border-bottom: 1px dashed #eee; }
+.bl-checklist li:last-child { border-bottom: 0; }
+.bl-checklist i { color: var(--bl-green); margin-top: .2rem; }
+
+/* ----- eligibility ring ----- */
+.bl-ring { position: relative; width: 150px; height: 150px; flex: 0 0 150px; }
+.bl-ring svg { transform: rotate(-90deg); }
+.bl-ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.bl-ring-label strong { font-size: 1.7rem; line-height: 1; color: var(--bl-ink); }
+.bl-ring-label span { font-size: .72rem; color: var(--bl-muted); margin-top: .25rem; max-width: 96px; }
+
+/* ----- empty state ----- */
+.bl-empty { text-align: center; padding: 2rem 1rem; color: var(--bl-muted); }
+.bl-empty i { font-size: 2rem; color: #e3b9b9; margin-bottom: .6rem; display: block; }
+.bl-empty strong { display: block; color: var(--bl-ink); font-size: 1rem; margin-bottom: .25rem; }
