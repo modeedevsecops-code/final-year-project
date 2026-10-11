@@ -143,7 +143,7 @@ $available_count = count(array_filter($matching_donors, function ($d) { return !
         <div class="bl-empty"><i class="fas fa-user-clock"></i><strong>No eligible, compatible donors right now</strong>Check back later, record a walk-in donation, or post an emergency alert to reach members.</div>
       <?php else: ?>
         <div class="bl-table-wrap">
-          <table class="bl-table bl-table-cards">
+          <table class="bl-table bl-table-cards bl-table-cards-xl">
             <thead>
               <tr>
                 <th>Donor</th><th>Group</th><th>Match</th><th>Availability</th>

@@ -128,6 +128,17 @@
     .bl-table-cards .bl-cell-end { text-align: right; }
 }
 
+/* Wide tables (e.g. Match Donor) switch to cards earlier, before they'd overflow. */
+@media (max-width: 1240px) {
+    .bl-table-cards-xl thead { display: none; }
+    .bl-table-cards-xl, .bl-table-cards-xl tbody, .bl-table-cards-xl tr, .bl-table-cards-xl td { display: block; width: 100%; }
+    .bl-table-cards-xl tr { border: 1px solid var(--bl-line); border-radius: 12px; margin-bottom: .8rem; padding: .4rem .2rem; }
+    .bl-table-cards-xl td { border: 0; padding: .4rem .8rem; display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+    .bl-table-cards-xl td[data-label]::before { content: attr(data-label); font-size: .7rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--bl-muted); }
+    .bl-table-cards-xl td.bl-td-full { display: block; }
+    .bl-table-cards-xl .bl-cell-end { text-align: right; }
+}
+
 /* ----- confirm form inside a table row ----- */
 .bl-confirm { display: flex; align-items: center; gap: .5rem; justify-content: flex-end; }
 .bl-units { display: inline-flex; align-items: center; border: 1px solid #ddd; border-radius: 8px; overflow: hidden; background: #fff; }
