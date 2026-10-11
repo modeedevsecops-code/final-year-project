@@ -1,22 +1,17 @@
 <?php
-session_start();
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
-// Allow both admin AND hospital officers (supervisors) to post emergency alerts
-if (!isset($_SESSION['role']) || !in_array($_SESSION['role'], ['admin', 'supervisor'])) {
-    header("Location: login.php");
-    exit;
-}
+// Allow both admin and hospital officers to post emergency alerts
+bl_require_role(['admin', 'officer']);
 
 $is_admin = ($_SESSION['role'] === 'admin');
 
 // Determine the poster ID:
-// Admin uses user_id from login table session; officer uses supervisor_id
+// Admin uses user_id from login table session; officer uses officer_id
 if ($is_admin) {
     $poster_id = isset($_SESSION['user']) ? intval($_SESSION['user']) : 1; // admin user_id
 } else {
-    $poster_id = isset($_SESSION['supervisor_id']) ? intval($_SESSION['supervisor_id']) : 0;
+    $poster_id = isset($_SESSION['officer_id']) ? intval($_SESSION['officer_id']) : 0;
 }
 
 $dbb = new operations();
@@ -25,12 +20,24 @@ $dbb = new operations();
 $post_success = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_post_notice'])) {
     bl_csrf_check();      // BL-14
-    $title   = htmlspecialchars(trim($_POST['title']));
-    $message = htmlspecialchars(trim($_POST['message']));
+    $title   = trim($_POST['title'] ?? '');
+    $message = trim($_POST['message'] ?? '');
 
     if (!empty($title) && !empty($message)) {
-        $dbb->post_notice($poster_id, $title, $message);
-        $post_success = "Emergency alert posted successfully!";
+        // Admin posts have no hospital_workers row, so officer_id is NULL for them.
+        global $db;
+        $officer_sql = $is_admin ? 'NULL' : intval($poster_id);
+        if ($stmt = mysqli_prepare($db->connection,
+                "INSERT INTO notices (officer_id, title, message) VALUES (" . $officer_sql . ", ?, ?)")) {
+            mysqli_stmt_bind_param($stmt, "ss", $title, $message);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
+        }
+        $r = mysqli_query($db->connection, "SELECT member_id FROM members");
+        bl_notify($db->connection, 'member', array_column(mysqli_fetch_all($r, MYSQLI_ASSOC), 'member_id'),
+                  'alert', 'Emergency alert: ' . mb_substr($title, 0, 150), mb_substr($message, 0, 300), 'emergency_alerts.php');
+        header('Location: notices.php?posted=1');
+        exit;
     }
 }
 
@@ -39,9 +46,9 @@ if ($is_admin) {
     // Fetch all notices across all officers
     global $db;
     $result = mysqli_query($db->connection,
-        "SELECT n.*, COALESCE(s.staff_name, 'BloodLink Admin') AS posted_by
+        "SELECT n.*, COALESCE(s.name, 'BloodLink Admin') AS posted_by
          FROM notices n
-         LEFT JOIN staff s ON s.staff_id = n.supervisor_id
+         LEFT JOIN hospital_workers s ON s.worker_id = n.officer_id
          ORDER BY n.created_at DESC"
     );
     $notices = [];
@@ -49,15 +56,15 @@ if ($is_admin) {
         $notices[] = $row;
     }
 } else {
-    $notices = $dbb->get_supervisor_notices($poster_id);
-    // Add a "posted_by" key for uniform rendering
-    foreach ($notices as &$n) {
-        $n['posted_by'] = 'You';
-    }
-    unset($n);
+    global $db;
+    $result = mysqli_query($db->connection,
+        "SELECT * FROM notices WHERE officer_id = " . intval($poster_id) . " ORDER BY created_at DESC");
+    $notices = [];
+    while ($row = mysqli_fetch_assoc($result)) { $row['posted_by'] = 'You'; $notices[] = $row; }
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 <head>
@@ -81,8 +88,12 @@ if ($is_admin) {
         ?>
     </p>
 
-    <?php if (!empty($post_success)): ?>
-        <div class="alert alert-success text-center"><?php echo $post_success; ?> ✅</div>
+    <?php if (isset($_GET['posted'])): ?>
+        <div class="alert alert-success text-center">Emergency alert posted successfully!</div>
+    <?php elseif (isset($_GET['deleted'])): ?>
+        <div class="alert alert-success text-center">Alert deleted.</div>
+    <?php elseif (isset($_GET['denied'])): ?>
+        <div class="alert alert-warning text-center">You can only delete alerts you posted.</div>
     <?php endif; ?>
 
     <!-- Post Alert Form -->
@@ -147,11 +158,12 @@ if ($is_admin) {
                                     <td><?php echo htmlspecialchars($notice['message']); ?></td>
                                     <td><?php echo date('d M Y, H:i', strtotime($notice['created_at'])); ?></td>
                                     <td>
-                                        <a href="delete_notices.php?id=<?php echo $notice['notice_id']; ?>"
-                                           class="btn btn-danger btn-sm"
-                                           onclick="return confirm('Are you sure you want to delete this emergency alert?')">
-                                            Delete
-                                        </a>
+                                        <form method="POST" action="delete_notices.php" class="d-inline"
+                                              onsubmit="return confirm('Are you sure you want to delete this emergency alert?')">
+                                            <?php bl_csrf_field(); ?>
+                                            <input type="hidden" name="notice_id" value="<?= (int)$notice['notice_id'] ?>">
+                                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                                        </form>
                                     </td>
                                 </tr>
                             <?php endforeach; ?>

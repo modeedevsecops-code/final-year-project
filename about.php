@@ -46,9 +46,9 @@ include 'inc/header.php';
                 <ul>
                     <li><strong>Donor Registration:</strong> Register and manage blood donors with blood type, location, and contact info</li>
                     <li><strong>Emergency Alerts:</strong> Hospital officers can broadcast urgent blood requests to all eligible donors</li>
-                    <li><strong>Geo-Location Map:</strong> Interactive map showing nearby blood banks, hospitals, and donor locations</li>
+                    <li><strong>Blood Bank Locator:</strong> Interactive map that ranks registered blood banks by distance and draws driving directions</li>
                     <li><strong>Blood Request Tracking:</strong> Monitor all incoming blood requests and their fulfillment status</li>
-                    <li><strong>Role-Based Access:</strong> Separate portals for Administrators, Hospital Officers, and Donors</li>
+                    <li><strong>Role-Based Access:</strong> Separate portals for Administrators, Hospital Officers, and Members (one account to donate and request blood)</li>
                 </ul>
 
                 <h3>Development Team</h3>

@@ -1,42 +1,23 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
 
 // Admin-only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 global $db;
 $conn = $db->connection;
+$ops  = new operations();
+$banks = $ops->get_blood_banks();
 $msg = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     bl_csrf_check();      // BL-14
-    $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
-    $email      = mysqli_real_escape_string($conn, trim($_POST['email']));
-    $phone      = mysqli_real_escape_string($conn, trim($_POST['phone']));
-    $position   = mysqli_real_escape_string($conn, trim($_POST['position']));
-    $hospital   = mysqli_real_escape_string($conn, trim($_POST['hospital']));
-    // Hash the officer's password at creation (BL-12).
-    $password   = password_hash(trim($_POST['password']), PASSWORD_DEFAULT);
-
-    if ($staff_name && $email && $phone && !empty(trim($_POST['password']))) {
-        $full_position = $position . ($hospital ? ' – ' . $hospital : '');
-        $q = "INSERT INTO staff (staff_name, phone, email, position, password)
-              VALUES ('$staff_name', '$phone', '$email', '$full_position', '$password')";
-        if (mysqli_query($conn, $q)) {
-            $msg = '<div class="alert alert-success text-center">Hospital Officer added successfully! <a href="manage_officers.php">View all officers</a></div>';
-        } else {
-            $msg = '<div class="alert alert-danger">Error: ' . mysqli_error($conn) . '</div>';
-        }
-    } else {
-        $msg = '<div class="alert alert-warning text-center">Please fill in all required fields.</div>';
-    }
+    list($added, $msg) = bl_create_officer($conn, $_POST);
+    if ($added) $msg = str_replace('</div>', ' <a href="manage_officers.php">View all officers</a></div>', $msg);
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 <head>
@@ -61,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
                     <?php bl_csrf_field(); // BL-14 ?>
                     <div class="mb-3">
                         <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" name="staff_name"
+                        <input type="text" class="form-control" name="name"
                                placeholder="e.g. Dr. Aliyu Bello" required>
                     </div>
 
@@ -85,9 +66,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label fw-bold">Hospital / Blood Bank Name</label>
-                        <input type="text" class="form-control" name="hospital"
-                               placeholder="e.g. Aminu Kano Teaching Hospital">
+                        <label class="form-label fw-bold">Blood Bank <span class="text-danger">*</span></label>
+                        <select class="form-control form-select" name="blood_bank_id" required>
+                            <option value="">-- Assign to a blood bank --</option>
+                            <?php foreach ($banks as $b): ?>
+                                <option value="<?= (int)$b['bank_id'] ?>"><?= htmlspecialchars($b['name']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                        <small class="text-muted">Donations this officer confirms are banked here. Manage banks under <a href="manage_blood_banks.php">Blood Banks</a>.</small>
                     </div>
 
                     <div class="mb-4">

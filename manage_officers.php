@@ -1,12 +1,8 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
 
 // Admin-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 global $db;
 $conn = $db->connection;
@@ -18,28 +14,7 @@ $dbb = new operations();
 $form_msg = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
     bl_csrf_check();      // BL-14
-    $staff_name = mysqli_real_escape_string($conn, trim($_POST['staff_name']));
-    $email = mysqli_real_escape_string($conn, trim($_POST['email']));
-    $phone = mysqli_real_escape_string($conn, trim($_POST['phone']));
-    $position = mysqli_real_escape_string($conn, trim($_POST['position']));
-    $hospital = mysqli_real_escape_string($conn, trim($_POST['hospital']));
-    // Hash the officer password at creation (BL-12).
-    $plain_password = trim($_POST['password']);
-    $password = password_hash($plain_password, PASSWORD_DEFAULT);
-
-    if ($staff_name && $email && $phone && $plain_password !== '') {
-        // Store hospital in position field (repurposed) or add to staff_name
-        $full_position = $position . ($hospital ? ' – ' . $hospital : '');
-        $q = "INSERT INTO staff (staff_name, phone, email, position, password)
-              VALUES ('$staff_name', '$phone', '$email', '$full_position', '$password')";
-        if (mysqli_query($conn, $q)) {
-            $form_msg = '<div class="alert alert-success">Hospital Officer added successfully!</div>';
-        } else {
-            $form_msg = '<div class="alert alert-danger">Error: ' . mysqli_error($conn) . '</div>';
-        }
-    } else {
-        $form_msg = '<div class="alert alert-warning">Please fill in all required fields.</div>';
-    }
+    list($added, $form_msg) = bl_create_officer($conn, $_POST);
 }
 
 // ─────────────────────────────────────────────────
@@ -48,7 +23,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_add_officer'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
     bl_csrf_check(); // BL-14 — was a CSRF-able GET link
     $del_id = intval($_POST['delete_id']);
-    if ($stmt = mysqli_prepare($conn, "DELETE FROM staff WHERE staff_id = ?")) {
+    $has = mysqli_fetch_assoc(mysqli_query($conn, "SELECT COUNT(*) AS n FROM donations WHERE officer_id = $del_id"));
+    if ((int)$has['n'] > 0) {
+        header('Location: manage_officers.php?blocked=' . (int)$has['n']);
+        exit;
+    }
+    mysqli_query($conn, "DELETE FROM notifications WHERE recipient_role = 'officer' AND recipient_id = $del_id");
+    if ($stmt = mysqli_prepare($conn, "DELETE FROM hospital_workers WHERE worker_id = ?")) {
         mysqli_stmt_bind_param($stmt, "i", $del_id);
         mysqli_stmt_execute($stmt);
         mysqli_stmt_close($stmt);
@@ -62,13 +43,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
 // ─────────────────────────────────────────────────
 $officers_res = mysqli_query(
     $conn,
-    "SELECT s.staff_id, s.staff_name, s.email, s.phone, s.position, s.date_registered,
-            COUNT(p.project_id) AS donor_count
-     FROM staff s
-     LEFT JOIN projects p ON s.staff_id = p.assigned_supervisor
-     GROUP BY s.staff_id
-     ORDER BY s.staff_name ASC"
+    "SELECT s.worker_id, s.name, s.email, s.phone, s.position, s.date_registered,
+            bb.name AS bank_name,
+            COUNT(d.donation_id) AS donation_count
+     FROM hospital_workers s
+     LEFT JOIN blood_banks bb ON bb.bank_id = s.blood_bank_id
+     LEFT JOIN donations d ON d.officer_id = s.worker_id
+     GROUP BY s.worker_id
+     ORDER BY s.name ASC"
 );
+$ops_banks = (new operations())->get_blood_banks();
 $officers = [];
 if ($officers_res) {
     while ($row = mysqli_fetch_assoc($officers_res)) {
@@ -77,6 +61,7 @@ if ($officers_res) {
 }
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
 
@@ -112,6 +97,9 @@ if ($officers_res) {
                 <?php if (isset($_GET['deleted'])): ?>
                     <div class="alert alert-success alert-dismissible fade show">Officer deleted successfully.</div>
                 <?php endif; ?>
+                <?php if (isset($_GET['blocked'])): ?>
+                    <div class="alert alert-warning">This officer has confirmed <?= (int)$_GET['blocked'] ?> donation(s), so they can't be deleted without breaking the donation ledger.</div>
+                <?php endif; ?>
 
                 <!-- Officers Table -->
                 <div class="card border-0 shadow-sm">
@@ -130,9 +118,10 @@ if ($officers_res) {
                                             <th>Officer Name</th>
                                             <th>Email</th>
                                             <th>Phone</th>
-                                            <th>Role / Hospital</th>
+                                            <th>Role</th>
+                                            <th>Blood Bank</th>
                                             <th>Registered</th>
-                                            <th>Donors Assigned</th>
+                                            <th>Donations</th>
                                             <th>Actions</th>
                                         </tr>
                                     </thead>
@@ -141,7 +130,7 @@ if ($officers_res) {
                                         foreach ($officers as $officer): ?>
                                             <tr>
                                                 <td><?php echo $i++; ?></td>
-                                                <td class="fw-bold"><?php echo htmlspecialchars($officer['staff_name']); ?></td>
+                                                <td class="fw-bold"><?php echo htmlspecialchars($officer['name']); ?></td>
                                                 <td><?php echo htmlspecialchars($officer['email']); ?></td>
                                                 <td><?php echo htmlspecialchars($officer['phone']); ?></td>
                                                 <td>
@@ -150,21 +139,22 @@ if ($officers_res) {
                                                     </small>
                                                 </td>
                                                 <td>
+                                                    <small><?php echo htmlspecialchars($officer['bank_name'] ?: '—'); ?></small>
+                                                </td>
+                                                <td>
                                                     <small><?php echo date('d M Y', strtotime($officer['date_registered'])); ?></small>
                                                 </td>
                                                 <td>
                                                     <span
-                                                        class="badge bg-<?php echo $officer['donor_count'] > 0 ? 'success' : 'secondary'; ?>">
-                                                        <?php echo $officer['donor_count']; ?> Donor(s)
+                                                        class="badge bg-<?php echo $officer['donation_count'] > 0 ? 'success' : 'secondary'; ?>">
+                                                        <?php echo $officer['donation_count']; ?>
                                                     </span>
                                                 </td>
                                                 <td>
-                                                    <a href="officer_donors.php?id=<?php echo $officer['staff_id']; ?>"
-                                                        class="btn btn-sm btn-outline-primary">View Donors</a>
                                                     <form method="POST" style="display:inline;"
                                                           onsubmit="return confirm('Delete this hospital officer? This cannot be undone.')">
                                                         <?php bl_csrf_field(); // BL-14 ?>
-                                                        <input type="hidden" name="delete_id" value="<?php echo (int)$officer['staff_id']; ?>">
+                                                        <input type="hidden" name="delete_id" value="<?php echo (int)$officer['worker_id']; ?>">
                                                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                                                     </form>
                                                 </td>
@@ -194,7 +184,7 @@ if ($officers_res) {
 
                             <div class="mb-3">
                                 <label class="form-label fw-bold">Full Name <span class="text-danger">*</span></label>
-                                <input type="text" name="staff_name" class="form-control"
+                                <input type="text" name="name" class="form-control"
                                     placeholder="e.g. Dr. Aliyu Bello" required>
                             </div>
 
@@ -218,9 +208,13 @@ if ($officers_res) {
                             </div>
 
                             <div class="mb-3">
-                                <label class="form-label fw-bold">Hospital / Blood Bank Name</label>
-                                <input type="text" name="hospital" class="form-control"
-                                    placeholder="e.g. Aminu Kano Teaching Hospital">
+                                <label class="form-label fw-bold">Blood Bank <span class="text-danger">*</span></label>
+                                <select name="blood_bank_id" class="form-control form-select" required>
+                                    <option value="">-- Assign to a blood bank --</option>
+                                    <?php foreach ($ops_banks as $b): ?>
+                                        <option value="<?= (int)$b['bank_id'] ?>"><?= htmlspecialchars($b['name']) ?></option>
+                                    <?php endforeach; ?>
+                                </select>
                             </div>
 
                             <div class="mb-3">

@@ -1,5 +1,6 @@
 <?php
 require_once('config/db.php');
+if (!empty($_SESSION['role'])) { header('Location: ' . bl_home_for_role($_SESSION['role'])); exit; }
 $dbb = new operations();
 $dbb->admin_login();
 ?>
@@ -61,15 +62,6 @@ $dbb->admin_login();
                              class="form-control"
                              placeholder="Password"
                              required>
-                    </div>
-
-                    <div class="form-group mb-3">
-                      <div class="checkbox">
-                        <label>
-                          <input type="checkbox" value="remember-me">
-                          Remember Password
-                        </label>
-                      </div>
                     </div>
 
                     <button type="submit"

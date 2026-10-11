@@ -1,5 +1,11 @@
 <?php
-session_start();
+require_once 'config/functions.php';
+
+// Live figures for the stats strip.
+$stat = function ($sql) use ($db) { $r = mysqli_query($db->connection, $sql); return $r ? (int)mysqli_fetch_row($r)[0] : 0; };
+$stat_members = $stat("SELECT COUNT(*) FROM members");
+$stat_units   = $stat("SELECT COALESCE(SUM(units),0) FROM donations WHERE status = 'Completed'");
+$stat_banks   = $stat("SELECT COUNT(*) FROM blood_banks");
 
 // Force the plain visitor navbar on this page, even if logged in
 $forceVisitorNav = true;
@@ -45,16 +51,16 @@ include 'inc/header.php';
                     <div class="card-body">
                         <div class="row text-center">
                             <div class="col-md-4 border-end">
-                                <h3 class="fw-bolder text-1000 mb-0">1,200+</h3>
-                                <p class="mb-0">Registered Donors</p>
+                                <h3 class="fw-bolder text-1000 mb-0"><?= number_format($stat_members) ?></h3>
+                                <p class="mb-0">Registered Members</p>
                             </div>
                             <div class="col-md-4 border-end">
-                                <h3 class="fw-bolder text-1000 mb-0">850+</h3>
-                                <p class="mb-0">Donations Made</p>
+                                <h3 class="fw-bolder text-1000 mb-0"><?= number_format($stat_units) ?></h3>
+                                <p class="mb-0">Units Donated</p>
                             </div>
                             <div class="col-md-4">
-                                <h3 class="fw-bolder text-1000 mb-0">30+</h3>
-                                <p class="mb-0">Partner Hospitals</p>
+                                <h3 class="fw-bolder text-1000 mb-0"><?= number_format($stat_banks) ?></h3>
+                                <p class="mb-0">Registered Blood Banks</p>
                             </div>
                         </div>
                     </div>
@@ -95,7 +101,7 @@ include 'inc/header.php';
                             <div class="card-body">
                                 <div class="mb-3 text-danger"><i class="fas fa-shield-alt fa-2x"></i></div>
                                 <h5 class="fw-bold">Secure Roles</h5>
-                                <p class="text-muted small">Role-based dashboards for Donors, Recipients, and Hospital Officers to ensure data security.</p>
+                                <p class="text-muted small">Separate dashboards for Members (one account to donate and request), Hospital Officers and Administrators.</p>
                             </div>
                         </div>
                     </div>

@@ -1,12 +1,8 @@
 <?php
-include 'inc/header.php';
 include 'config/db.php';
 
 // Admin-only access
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'admin') {
-    header('Location: login.php');
-    exit();
-}
+bl_require_role('admin');
 
 global $db;
 $conn = $db->connection;
@@ -14,8 +10,9 @@ $conn = $db->connection;
 // ─────────────────────────────────────────────────
 // Filters
 // ─────────────────────────────────────────────────
-$date_from = isset($_GET['date_from']) ? $_GET['date_from'] : '';
-$date_to = isset($_GET['date_to']) ? $_GET['date_to'] : '';
+$valid_date = function ($d) { return (is_string($d) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $d)) ? $d : ''; };
+$date_from = $valid_date($_GET['date_from'] ?? '');
+$date_to   = $valid_date($_GET['date_to'] ?? '');
 $export = isset($_GET['export']) ? $_GET['export'] : '';
 
 $df = $date_from ? mysqli_real_escape_string($conn, $date_from) : '';
@@ -30,15 +27,15 @@ if ($export === 'donations_csv') {
     $out = fopen('php://output', 'w');
     fputcsv($out, ['#', 'Donation Date', 'Donor Name', 'Donor ID', 'Blood Group', 'Hospital Officer', 'Hospital / Recipient', 'Units', 'Status', 'Recorded At']);
 
-    $q = "SELECT d.donation_date, s.name AS donor_name, s.reg_no AS donor_id, d.blood_group,
-                 st.staff_name AS officer_name,
+    $q = "SELECT d.donation_date, s.name AS donor_name, s.member_code AS donor_id, d.blood_group,
+                 st.name AS officer_name,
                  COALESCE(br.hospital_name, r.name) AS hospital,
                  d.units, d.status, d.created_at
           FROM donations d
-          LEFT JOIN students s  ON s.student_id = d.donor_id
-          LEFT JOIN staff    st ON st.staff_id  = d.officer_id
+          LEFT JOIN members s  ON s.member_id = d.donor_id
+          LEFT JOIN hospital_workers    st ON st.worker_id  = d.officer_id
           LEFT JOIN blood_requests br ON br.request_id = d.request_id
-          LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
+          LEFT JOIN members r ON r.member_id = d.recipient_id
           WHERE 1=1";
     if ($df)
         $q .= " AND d.donation_date >= '$df'";
@@ -49,10 +46,10 @@ if ($export === 'donations_csv') {
     $res = mysqli_query($conn, $q);
     $n = 1;
     while ($r = mysqli_fetch_assoc($res)) {
-        fputcsv($out, [
-            $n++, $r['donation_date'], $r['donor_name'], $r['donor_id'], $r['blood_group'],
+        fputcsv($out, array_map('bl_csv_cell', [
+            $n++, $r['donation_date'], $r['donor_name'] ?? '(deleted member)', $r['donor_id'], $r['blood_group'],
             $r['officer_name'], $r['hospital'], $r['units'], $r['status'], $r['created_at']
-        ]);
+        ]));
     }
     fclose($out);
     exit();
@@ -70,8 +67,8 @@ function safe_count($conn, $sql)
     return intval($row['cnt'] ?? 0);
 }
 
-$total_donors = safe_count($conn, "SELECT COUNT(*) AS cnt FROM students");
-$total_officers = safe_count($conn, "SELECT COUNT(*) AS cnt FROM staff");
+$total_donors = safe_count($conn, "SELECT COUNT(*) AS cnt FROM members");
+$total_officers = safe_count($conn, "SELECT COUNT(*) AS cnt FROM hospital_workers");
 $total_donations = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations");
 $total_alerts = safe_count($conn, "SELECT COUNT(*) AS cnt FROM notices");
 
@@ -87,12 +84,12 @@ $pending_count  = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations WHERE
 $rejected_count = safe_count($conn, "SELECT COUNT(*) AS cnt FROM donations WHERE status='Cancelled'");
 
 // ─────────────────────────────────────────────────
-// Blood Group Distribution (from students.blood_group)
+// Blood Group Distribution (from donors.blood_group)
 // ─────────────────────────────────────────────────
 $bg_res = mysqli_query(
     $conn,
     "SELECT blood_group, COUNT(*) AS cnt
-     FROM students
+     FROM members
      GROUP BY blood_group
      ORDER BY cnt DESC"
 );
@@ -109,11 +106,11 @@ if ($bg_res) {
 // ─────────────────────────────────────────────────
 $top_donors_res = mysqli_query(
     $conn,
-    "SELECT s.student_id, s.name, s.reg_no AS donor_id, s.blood_group,
+    "SELECT s.member_id, s.name, s.member_code AS donor_id, s.blood_group,
             COUNT(d.donation_id) AS donation_count
-     FROM students s
-     LEFT JOIN donations d ON d.donor_id = s.student_id
-     GROUP BY s.student_id
+     FROM members s
+     LEFT JOIN donations d ON d.donor_id = s.member_id
+     GROUP BY s.member_id
      ORDER BY donation_count DESC
      LIMIT 10"
 );
@@ -123,11 +120,11 @@ $top_donors_res = mysqli_query(
 // ─────────────────────────────────────────────────
 $top_officers_res = mysqli_query(
     $conn,
-    "SELECT st.staff_id, st.staff_name, st.position,
+    "SELECT st.worker_id, st.name, st.position,
             COUNT(d.donation_id) AS donors_assigned
-     FROM staff st
-     LEFT JOIN donations d ON d.officer_id = st.staff_id
-     GROUP BY st.staff_id
+     FROM hospital_workers st
+     LEFT JOIN donations d ON d.officer_id = st.worker_id
+     GROUP BY st.worker_id
      ORDER BY donors_assigned DESC
      LIMIT 10"
 );
@@ -136,15 +133,15 @@ $top_officers_res = mysqli_query(
 // Recent Blood Donations (filtered)
 // ─────────────────────────────────────────────────
 $recent_q = "SELECT d.donation_date AS entry_date,
-                    s.name AS donor_name, s.reg_no AS donor_id, d.blood_group,
-                    st.staff_name AS officer_name,
+                    s.name AS donor_name, s.member_code AS donor_id, d.blood_group,
+                    st.name AS officer_name,
                     COALESCE(br.hospital_name, r.name) AS hospital,
                     CONCAT(d.units, ' unit(s)') AS activities, d.status, d.created_at
              FROM donations d
-             LEFT JOIN students s  ON s.student_id = d.donor_id
-             LEFT JOIN staff    st ON st.staff_id  = d.officer_id
+             LEFT JOIN members s  ON s.member_id = d.donor_id
+             LEFT JOIN hospital_workers    st ON st.worker_id  = d.officer_id
              LEFT JOIN blood_requests br ON br.request_id = d.request_id
-             LEFT JOIN recipients r ON r.recipient_id = d.recipient_id
+             LEFT JOIN members r ON r.member_id = d.recipient_id
              WHERE 1=1";
 if ($df)
     $recent_q .= " AND d.donation_date >= '$df'";
@@ -159,14 +156,15 @@ $recent_res = mysqli_query($conn, $recent_q);
 $alerts_res = mysqli_query(
     $conn,
     "SELECT n.notice_id, n.title, n.message, n.created_at,
-            COALESCE(s.staff_name, 'BloodLink Admin') AS posted_by
+            COALESCE(s.name, 'BloodLink Admin') AS posted_by
      FROM notices n
-     LEFT JOIN staff s ON s.staff_id = n.supervisor_id
+     LEFT JOIN hospital_workers s ON s.worker_id = n.officer_id
      ORDER BY n.created_at DESC
      LIMIT 10"
 );
 ?>
 
+<?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
 <html lang="en-US">
 
@@ -225,7 +223,7 @@ $alerts_res = mysqli_query(
                     <div class="card border-0 shadow-sm text-center py-3 h-100">
                         <div class="card-body p-2">
                             <h3 class="text-danger fw-bold"><?php echo $total_donors; ?></h3>
-                            <p class="mb-0 small text-muted">Donors</p>
+                            <p class="mb-0 small text-muted">Members</p>
                         </div>
                     </div>
                 </div>
@@ -266,6 +264,26 @@ $alerts_res = mysqli_query(
                         <div class="card-body p-2">
                             <h3 class="text-info fw-bold"><?php echo $total_requests; ?></h3>
                             <p class="mb-0 small text-muted">Blood Requests</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-7">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-dark text-white fw-bold">Donor Blood-Group Distribution</div>
+                        <div class="card-body">
+                            <canvas id="bgChart" height="130"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-5">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-header bg-dark text-white fw-bold">Donation Status</div>
+                        <div class="card-body d-flex align-items-center justify-content-center">
+                            <canvas id="statusChart" height="200"></canvas>
                         </div>
                     </div>
                 </div>
@@ -365,7 +383,7 @@ $alerts_res = mysqli_query(
                                             while ($r = mysqli_fetch_assoc($top_officers_res)): ?>
                                                 <tr>
                                                     <td><?php echo $k++; ?></td>
-                                                    <td class="fw-bold"><?php echo htmlspecialchars($r['staff_name']); ?></td>
+                                                    <td class="fw-bold"><?php echo htmlspecialchars($r['name']); ?></td>
                                                     <td><small
                                                             class="text-muted"><?php echo htmlspecialchars($r['position'] ?: '—'); ?></small>
                                                     </td>
@@ -491,6 +509,37 @@ $alerts_res = mysqli_query(
     </main>
 
     <?php include 'inc/main_js.php'; ?>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+    <script>
+    (function () {
+        if (typeof Chart === 'undefined') return;
+        var bgLabels = <?php echo json_encode(array_column($blood_groups, 'blood_group')); ?>;
+        var bgCounts = <?php echo json_encode(array_map('intval', array_column($blood_groups, 'cnt'))); ?>;
+        var bgEl = document.getElementById('bgChart');
+        if (bgEl && bgLabels.length) {
+            new Chart(bgEl, {
+                type: 'bar',
+                data: { labels: bgLabels, datasets: [{ label: 'Donors', data: bgCounts, backgroundColor: '#cc0000' }] },
+                options: { responsive: true, plugins: { legend: { display: false } },
+                           scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+            });
+        }
+        var statusEl = document.getElementById('statusChart');
+        if (statusEl) {
+            new Chart(statusEl, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Completed', 'Pending', 'Cancelled'],
+                    datasets: [{
+                        data: [<?php echo (int)$approved_count; ?>, <?php echo (int)$pending_count; ?>, <?php echo (int)$rejected_count; ?>],
+                        backgroundColor: ['#2f8f5b', '#e0a800', '#cc0000']
+                    }]
+                },
+                options: { responsive: true, plugins: { legend: { position: 'bottom' } } }
+            });
+        }
+    })();
+    </script>
 </body>
 
 </html>

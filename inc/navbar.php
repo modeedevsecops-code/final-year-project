@@ -35,9 +35,8 @@
                 $dashboardLink = 'index.php';
                 switch ($_SESSION['role']) {
                     case 'admin': $dashboardLink = 'dashboard.php'; break;
-                    case 'supervisor': $dashboardLink = 'officer_dashboard.php'; break;
-                    case 'student': $dashboardLink = 'donor_dashboard.php'; break;
-                    case 'recipient': $dashboardLink = 'recipient_dashboard.php'; break;
+                    case 'officer': $dashboardLink = 'officer_dashboard.php'; break;
+                    case 'member': $dashboardLink = 'member_dashboard.php'; break;
                 }
                 ?>
                 <a href="<?php echo $dashboardLink; ?>" class="btn btn-danger rounded-pill ms-lg-3">Go to Dashboard</a>
@@ -57,10 +56,10 @@
 $current_page = basename($_SERVER['PHP_SELF']);
 
 // Login sets $_SESSION['name']; older code wrote user_name. Prefer the one that
-// exists so the topbar shows the real name, not "Admin"/"Supervisor" (BL-20).
+// exists so the topbar shows the real name, not "Admin"/"Officer" (BL-20).
 $displayName = $_SESSION['name']
     ?? $_SESSION['user_name']
-    ?? $_SESSION['reg_no']
+    ?? $_SESSION['donor_code']
     ?? ucfirst($_SESSION['role'] ?? 'User');
 
 $avatarLetter = strtoupper(substr(trim($displayName), 0, 1));
@@ -69,9 +68,8 @@ if ($avatarLetter === '') { $avatarLetter = 'U'; }
 // Where this role's Dashboard lives (used by the topbar menu).
 switch ($_SESSION['role'] ?? '') {
     case 'admin':      $dashLinkForRole = 'dashboard.php'; break;
-    case 'supervisor': $dashLinkForRole = 'officer_dashboard.php'; break;
-    case 'student':    $dashLinkForRole = 'donor_dashboard.php'; break;
-    case 'recipient':  $dashLinkForRole = 'recipient_dashboard.php'; break;
+    case 'officer': $dashLinkForRole = 'officer_dashboard.php'; break;
+    case 'member':    $dashLinkForRole = 'member_dashboard.php'; break;
     default:           $dashLinkForRole = 'index.php';
 }
 ?>
@@ -83,9 +81,37 @@ switch ($_SESSION['role'] ?? '') {
         <span>BloodLink</span>
     </div>
     <div class="topbar-right">
-        <div class="topbar-bell">
+        <?php
+        list($nRole, $nId) = bl_current_user();
+        $nUnread = bl_unread_count($db->connection, $nRole, $nId);
+        $nItems  = bl_notifications($db->connection, $nRole, $nId, 8);
+        $nBack   = basename($_SERVER['PHP_SELF']) . (!empty($_SERVER['QUERY_STRING']) ? '?' . $_SERVER['QUERY_STRING'] : '');
+        ?>
+        <div class="topbar-bell" id="notifBell" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
             <i class="fas fa-bell"></i>
-            <span class="dot"></span>
+            <span class="notif-badge" id="notifBadge"<?= $nUnread ? '' : ' hidden' ?>><?= $nUnread > 99 ? '99+' : $nUnread ?></span>
+            <div class="notif-menu" id="notifMenu" role="menu">
+                <div class="notif-head">
+                    <strong>Notifications</strong>
+                    <form method="POST" action="notifications.php" id="notifMarkAll"<?= $nUnread ? '' : ' hidden' ?>>
+                        <?php bl_csrf_field(); ?>
+                        <input type="hidden" name="back" value="<?= htmlspecialchars($nBack) ?>">
+                        <button type="submit" name="btn_mark_all" class="notif-markall">Mark all as read</button>
+                    </form>
+                </div>
+                <div id="notifList">
+                    <?php if (empty($nItems)): ?>
+                        <div class="notif-empty">No notifications yet.</div>
+                    <?php else: foreach ($nItems as $n): ?>
+                        <a href="notification_open.php?id=<?= (int)$n['notification_id'] ?>" class="notif-row<?= $n['is_read'] ? '' : ' unread' ?>">
+                            <span class="notif-icon"><i class="fas <?= bl_notification_icon($n['type']) ?>"></i></span>
+                            <span class="notif-text"><strong><?= htmlspecialchars($n['title']) ?></strong><?php if ($n['body']): ?><span><?= htmlspecialchars($n['body']) ?></span><?php endif; ?></span>
+                            <span class="notif-time"><?= htmlspecialchars(bl_time_ago($n['created_at'])) ?></span>
+                        </a>
+                    <?php endforeach; endif; ?>
+                </div>
+                <a href="notifications.php" class="notif-all">View all notifications</a>
+            </div>
         </div>
         <div class="topbar-user" id="topbarUser" role="button" tabindex="0" aria-haspopup="true" aria-expanded="false">
             <div class="topbar-avatar"><?php echo htmlspecialchars($avatarLetter); ?></div>
@@ -96,10 +122,14 @@ switch ($_SESSION['role'] ?? '') {
                     <div class="topbar-avatar"><?php echo htmlspecialchars($avatarLetter); ?></div>
                     <div>
                         <div class="tm-name"><?php echo htmlspecialchars($displayName); ?></div>
-                        <div class="tm-role"><?php echo htmlspecialchars(ucfirst($_SESSION['role'] === 'supervisor' ? 'Hospital Officer' : ($_SESSION['role'] === 'student' ? 'Donor' : $_SESSION['role']))); ?></div>
+                        <div class="tm-role"><?php echo htmlspecialchars($_SESSION['role'] === 'officer' ? 'Hospital Officer' : ($_SESSION['role'] === 'member' ? 'Member' : ucfirst($_SESSION['role']))); ?></div>
                     </div>
                 </div>
                 <a class="topbar-menu-item" href="<?php echo $dashLinkForRole ?? '#'; ?>"><i class="fas fa-gauge"></i> Dashboard</a>
+                <a class="topbar-menu-item" href="notifications.php"><i class="fas fa-bell"></i> Notifications</a>
+                <?php if (($_SESSION['role'] ?? '') === 'member'): ?>
+                <a class="topbar-menu-item" href="profile.php"><i class="fas fa-user"></i> My Profile</a>
+                <?php endif; ?>
                 <a class="topbar-menu-item topbar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a>
             </div>
         </div>
@@ -116,43 +146,46 @@ switch ($_SESSION['role'] ?? '') {
         if ($_SESSION['role'] == 'admin' ) { 
         ?>
             <li><a class="nav-link <?php echo $current_page=='dashboard.php'?'active':''; ?>" href="dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
-            <li><a class="nav-link <?php echo $current_page=='manage_donors.php'?'active':''; ?>" href="manage_donors.php"><i class="fas fa-tint"></i> Manage Donors</a></li>
+            <li><a class="nav-link <?php echo in_array($current_page,['manage_members.php','edit_member.php'])?'active':''; ?>" href="manage_members.php"><i class="fas fa-users"></i> Manage Members</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_officers.php'?'active':''; ?>" href="manage_officers.php"><i class="fas fa-briefcase"></i> Hospital Officers</a></li>
-            <li><a class="nav-link <?php echo $current_page=='manage_recipients.php'?'active':''; ?>" href="manage_recipients.php"><i class="fas fa-user-injured"></i> Recipients</a></li>
+            <li><a class="nav-link <?php echo $current_page=='manage_blood_banks.php'?'active':''; ?>" href="manage_blood_banks.php"><i class="fas fa-hospital"></i> Blood Banks</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
+            <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
+            <li><a class="nav-link <?php echo $current_page=='find_donors.php'?'active':''; ?>" href="find_donors.php"><i class="fas fa-magnifying-glass"></i> Find Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='manage_blood_stock.php'?'active':''; ?>" href="manage_blood_stock.php"><i class="fas fa-flask"></i> Blood Stock</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
             <li><a class="nav-link <?php echo $current_page=='reports.php'?'active':''; ?>" href="reports.php"><i class="fas fa-chart-line"></i> Reports</a></li>
+            <?php $newMsgs = (int)(mysqli_fetch_row(mysqli_query($db->connection, "SELECT COUNT(*) FROM contact_messages WHERE status = 'new'"))[0] ?? 0); ?>
+            <li><a class="nav-link <?php echo $current_page=='messages.php'?'active':''; ?>" href="messages.php"><i class="fas fa-envelope"></i> Messages<?php if ($newMsgs): ?> <span class="badge bg-danger ms-1"><?= $newMsgs ?></span><?php endif; ?></a></li>
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php
-        } elseif ($_SESSION['role'] == 'supervisor' ) {
+        } elseif ($_SESSION['role'] == 'officer' ) {
         ?>
             <li><a class="nav-link <?php echo $current_page=='officer_dashboard.php'?'active':''; ?>" href="officer_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='assigned_donors.php'?'active':''; ?>" href="assigned_donors.php"><i class="fas fa-users"></i> Donors</a></li>
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
+            <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
+            <li><a class="nav-link <?php echo $current_page=='find_donors.php'?'active':''; ?>" href="find_donors.php"><i class="fas fa-magnifying-glass"></i> Find Donors</a></li>
+            <li><a class="nav-link <?php echo $current_page=='record_donation.php'?'active':''; ?>" href="record_donation.php"><i class="fas fa-tint"></i> Record Donation</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
             <li class="sidebar-sep"></li>
             <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php
-        } elseif ($_SESSION['role'] == 'student' ) {
+        } elseif ($_SESSION['role'] == 'member' ) {
         ?>
-            <li><a class="nav-link <?php echo $current_page=='donor_dashboard.php'?'active':''; ?>" href="donor_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
+            <li><a class="nav-link <?php echo $current_page=='member_dashboard.php'?'active':''; ?>" href="member_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='donation_form.php'?'active':''; ?>" href="donation_form.php"><i class="fas fa-tint"></i> Donate Blood</a></li>
-            <li><a class="nav-link <?php echo $current_page=='emergency_alerts.php'?'active':''; ?>" href="emergency_alerts.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
-            <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Nearby Banks</a></li>
-            <li class="sidebar-sep"></li>
-            <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-        <?php
-        } elseif ($_SESSION['role'] == 'recipient' ) {
-        ?>
-            <li><a class="nav-link <?php echo $current_page=='recipient_dashboard.php'?'active':''; ?>" href="recipient_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='request_blood.php'?'active':''; ?>" href="request_blood.php"><i class="fas fa-hand-holding-medical"></i> Request Blood</a></li>
             <li><a class="nav-link <?php echo $current_page=='request_history.php'?'active':''; ?>" href="request_history.php"><i class="fas fa-history"></i> Request History</a></li>
+            <li><a class="nav-link <?php echo $current_page=='my_donations.php'?'active':''; ?>" href="my_donations.php"><i class="fas fa-award"></i> My Donations</a></li>
+            <li><a class="nav-link <?php echo $current_page=='emergency_alerts.php'?'active':''; ?>" href="emergency_alerts.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Nearby Banks</a></li>
-            <li><a class="nav-link <?php echo $current_page=='logout.php'?'active':''; ?>" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
+            <li><a class="nav-link <?php echo $current_page=='profile.php'?'active':''; ?>" href="profile.php"><i class="fas fa-user"></i> My Profile</a></li>
+            <li class="sidebar-sep"></li>
+            <li><a class="nav-link sidebar-logout" href="logout.php"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
         <?php } ?>
     </ul>
 </nav>
@@ -161,6 +194,34 @@ switch ($_SESSION['role'] ?? '') {
 document.getElementById('sidebarToggle')?.addEventListener('click', function() {
     document.getElementById('sidebar').classList.toggle('show');
 });
+// Notification bell: open/close, and refresh the badge + list every 30 s.
+(function () {
+    var bell = document.getElementById('notifBell'), menu = document.getElementById('notifMenu');
+    if (!bell || !menu) return;
+    function toggle(e) { e.stopPropagation(); var open = menu.classList.toggle('open'); bell.setAttribute('aria-expanded', open); }
+    bell.addEventListener('click', function (e) { if (!menu.contains(e.target)) toggle(e); });
+    bell.addEventListener('keydown', function (e) { if ((e.key === 'Enter' || e.key === ' ') && e.target === bell) { e.preventDefault(); toggle(e); } });
+    document.addEventListener('click', function () { menu.classList.remove('open'); bell.setAttribute('aria-expanded', 'false'); });
+    menu.addEventListener('click', function (e) { e.stopPropagation(); });
+    var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); };
+    var icons = {request_new:'fa-hand-holding-medical', request_status:'fa-clipboard-check', donation:'fa-tint', emergency:'fa-triangle-exclamation',
+                 low_stock:'fa-flask', member_new:'fa-user-plus', contact:'fa-envelope', alert:'fa-bell'};
+    function refresh() {
+        fetch('notifications.php?format=json', {credentials:'same-origin'}).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+            if (!d) return;
+            var badge = document.getElementById('notifBadge');
+            badge.hidden = !d.unread; badge.textContent = d.unread > 99 ? '99+' : d.unread;
+            document.getElementById('notifMarkAll').hidden = !d.unread;
+            document.getElementById('notifList').innerHTML = d.items.length ? d.items.map(function (n) {
+                return '<a href="notification_open.php?id=' + n.id + '" class="notif-row' + (n.read ? '' : ' unread') + '">'
+                     + '<span class="notif-icon"><i class="fas ' + (icons[n.type] || 'fa-bell') + '"></i></span>'
+                     + '<span class="notif-text"><strong>' + esc(n.title) + '</strong>' + (n.body ? '<span>' + esc(n.body) + '</span>' : '') + '</span>'
+                     + '<span class="notif-time">' + esc(n.ago) + '</span></a>';
+            }).join('') : '<div class="notif-empty">No notifications yet.</div>';
+        }).catch(function () {});
+    }
+    setInterval(refresh, 30000);
+})();
 // Topbar user dropdown (profile + logout)
 (function () {
     var u = document.getElementById('topbarUser');

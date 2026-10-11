@@ -1,24 +1,17 @@
 <?php
-if (session_status() === PHP_SESSION_NONE) {
-    session_start();
-}
 require_once 'config/db.php';
-require_once 'inc/header.php';
 
 // Recipients only
-if (!isset($_SESSION['role']) || $_SESSION['role'] !== 'recipient') {
-    header("Location: login.php");
-    exit;
-}
+bl_require_role('member');
 
 $db_conn = $db->connection;
 
 // Adjust this if your recipient id session key is different
-$recipientId = $_SESSION['recipient_id'] ?? $_SESSION['user_id'] ?? $_SESSION['id'] ?? null;
+$recipientId = $_SESSION['member_id'] ?? $_SESSION['user_id'] ?? null; // the member filing the request
 $recipientName = $_SESSION['user_name'] ?? $_SESSION['name'] ?? 'Recipient';
 
 $errors = [];
-$success = false;
+$success = isset($_GET['submitted']);
 
 // recipient_id is now declared in db/schema.sql. The runtime ALTER that used to
 // live here used MariaDB-only "ADD COLUMN IF NOT EXISTS" syntax, which is a hard
@@ -34,6 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $location      = trim($_POST['location'] ?? '');
     $urgencyLevel  = trim($_POST['urgency_level'] ?? '');
     $contactPhone  = trim($_POST['contact_phone'] ?? '');
+    $requiredHours = (int)($_POST['required_within_hours'] ?? 0);
+
+    // Severity mirrors the urgency choice, in the vocabulary the priority engine uses.
+    $severityMap = ['Critical Emergency' => 'critical', 'Urgent' => 'severe', 'Normal' => 'moderate'];
+    $severity    = $severityMap[$urgencyLevel] ?? 'moderate';
 
     $validBloodGroups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
     $validUrgency = ['Normal','Urgent','Critical Emergency'];
@@ -65,31 +63,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         // Geocode the hospital location once, at submission, so the request
         // appears on the map (Phase 3, BL-05). NULL coords if it can't be found.
-        list($reqLat, $reqLng) = bl_geocode($hospitalName . ', ' . $location);
+        // A registered blood bank's own coordinates are exact; free-text geocoding of a
+        // hospital name can land kilometres away and skew every donor distance.
+        $bankStmt = mysqli_prepare($db_conn, "SELECT latitude, longitude FROM blood_banks WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND latitude IS NOT NULL LIMIT 1");
+        mysqli_stmt_bind_param($bankStmt, "s", $hospitalName);
+        mysqli_stmt_execute($bankStmt);
+        $bankRow = mysqli_fetch_assoc(mysqli_stmt_get_result($bankStmt));
+        mysqli_stmt_close($bankStmt);
+        list($reqLat, $reqLng) = $bankRow
+            ? [(float)$bankRow['latitude'], (float)$bankRow['longitude']]
+            : bl_geocode($hospitalName . ', ' . $location);
+
+        // Emergency priority score (0..100) drives the Emergency Board ordering.
+        $ops = new operations();
+        $hoursForScore = $requiredHours > 0 ? $requiredHours : null;
+        $priorityScore = $ops->compute_priority($severity, $bloodGroup, $hoursForScore);
+        $reqHoursSql   = $requiredHours > 0 ? $requiredHours : null;
 
         $stmt = mysqli_prepare($db_conn,
             "INSERT INTO blood_requests
-                (recipient_id, patient_name, blood_group, units_needed, hospital_name, location, latitude, longitude, urgency_level, status, requested_by, contact_phone)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)"
+                (recipient_id, patient_name, blood_group, units_needed, hospital_name, location, latitude, longitude, urgency_level, severity, required_within_hours, priority_score, status, requested_by, contact_phone)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Pending', ?, ?)"
         );
         mysqli_stmt_bind_param(
-            $stmt, "ississddsss",
+            $stmt, "ississddssiiss",
             $recipientId, $patientName, $bloodGroup, $unitsNeeded,
-            $hospitalName, $location, $reqLat, $reqLng, $urgencyLevel, $recipientName, $contactPhone
+            $hospitalName, $location, $reqLat, $reqLng, $urgencyLevel,
+            $severity, $reqHoursSql, $priorityScore, $recipientName, $contactPhone
         );
 
         if (mysqli_stmt_execute($stmt)) {
-            $success = true;
+            $newRequestId = mysqli_insert_id($db_conn);
 
             if ($urgencyLevel === 'Critical Emergency') {
                 $title = "Emergency: $bloodGroup blood needed at $hospitalName";
                 $message = "$unitsNeeded unit(s) of $bloodGroup needed urgently for patient $patientName at $hospitalName ($location). Contact: $contactPhone.";
                 $alertStmt = mysqli_prepare($db_conn,
-                    "INSERT INTO notices (title, message, supervisor_id, created_at) VALUES (?, ?, NULL, NOW())"
+                    "INSERT INTO notices (title, message, officer_id, created_at) VALUES (?, ?, NULL, NOW())"
                 );
                 mysqli_stmt_bind_param($alertStmt, "ss", $title, $message);
                 mysqli_stmt_execute($alertStmt);
+                // Every member who could donate right now hears about it directly.
+                bl_notify($db_conn, 'member', bl_eligible_donor_ids($db_conn, $bloodGroup, $recipientId), 'emergency',
+                          "Emergency: $bloodGroup needed at $hospitalName", "$unitsNeeded unit(s) needed urgently. You are a compatible, eligible donor — please contact the blood bank.", 'emergency_alerts.php');
             }
+
+            $summary = "$urgencyLevel · $unitsNeeded unit(s) of $bloodGroup for $patientName at $hospitalName.";
+            bl_notify($db_conn, 'officer', bl_officer_ids($db_conn), 'request_new', "New $bloodGroup request", $summary, "match_donor.php?request_id=$newRequestId");
+            bl_notify($db_conn, 'admin', bl_admin_ids($db_conn), 'request_new', "New $bloodGroup request", $summary, 'emergency_board.php');
+            bl_notify($db_conn, 'member', $recipientId, 'request_status', 'Request received', "Your $bloodGroup request for $patientName is Pending — officers have been notified.", 'request_history.php');
+
+            header('Location: request_blood.php?submitted=1');
+            exit;
         } else {
             $errors[] = "Something went wrong saving your request. Please try again.";
         }
@@ -171,6 +196,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </span>
                             </label>
                         </div>
+                        <div class="rb-field rb-span-6" style="margin-top:14px;">
+                            <label>Needed within (hours) <small style="color:#eee;">— optional, sharpens priority</small></label>
+                            <input type="number" name="required_within_hours" min="1" max="720" form="rbForm"
+                                   placeholder="e.g. 6"
+                                   value="<?php echo htmlspecialchars($_POST['required_within_hours'] ?? ''); ?>">
+                        </div>
                     </section>
 
                     <div class="rb-two-col">
@@ -207,9 +238,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="rb-grid">
                                 <div class="rb-field rb-span-12">
                                     <label>Hospital Name</label>
-                                    <input type="text" name="hospital_name" required form="rbForm"
+                                    <input type="text" name="hospital_name" required form="rbForm" list="bankNames" autocomplete="off"
                                            placeholder="e.g. Barau Dikko Teaching Hospital"
                                            value="<?php echo htmlspecialchars($_POST['hospital_name'] ?? ''); ?>">
+                                    <datalist id="bankNames">
+                                        <?php $bn = mysqli_query($db_conn, "SELECT name FROM blood_banks ORDER BY name");
+                                        while ($bn && ($b = mysqli_fetch_assoc($bn))): ?>
+                                            <option value="<?= htmlspecialchars($b['name']) ?>">
+                                        <?php endwhile; ?>
+                                    </datalist>
+                                    <small style="color:#888;">Pick a registered blood bank to pin the request to its exact location.</small>
                                 </div>
                                 <div class="rb-field rb-span-6">
                                     <label>Location / City</label>
@@ -230,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 <form method="POST" action="request_blood.php" id="rbForm" class="rb-actions">
                     <?php bl_csrf_field(); // BL-14 ?>
-                    <a href="recipient_dashboard.php" class="rb-btn rb-btn-ghost">Cancel</a>
+                    <a href="member_dashboard.php" class="rb-btn rb-btn-ghost">Cancel</a>
                     <button type="submit" class="rb-btn rb-btn-primary">Submit Request</button>
                 </form>
             </div>

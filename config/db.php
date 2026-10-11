@@ -24,13 +24,17 @@ class dbconfig
     public function db_connect()
     {
         // Defaults match the XAMPP/MAMP assumption the app shipped with.
-        // config.local.php can override any of these.
+        // config.local.php can override any of these. DB_PORT / DB_SOCKET are
+        // optional — needed on Windows "Local", where MySQL is reached over TCP
+        // on 127.0.0.1 with a per-site port (see the site's Database tab).
         $host = defined('DB_HOST') ? DB_HOST : 'localhost';
         $user = defined('DB_USER') ? DB_USER : 'root';
         $pass = defined('DB_PASS') ? DB_PASS : '';
         $name = defined('DB_NAME') ? DB_NAME : 'donor_app';
+        $port = defined('DB_PORT') && DB_PORT ? (int) DB_PORT : null;
+        $sock = defined('DB_SOCKET') && DB_SOCKET ? DB_SOCKET : null;
 
-        $this->connection = mysqli_connect($host, $user, $pass, $name);
+        $this->connection = mysqli_connect($host, $user, $pass, $name, $port, $sock);
 
         if (mysqli_connect_error()) {
             die("Connection Failed");
