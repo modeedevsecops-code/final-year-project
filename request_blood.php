@@ -63,7 +63,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($errors)) {
         // Geocode the hospital location once, at submission, so the request
         // appears on the map (Phase 3, BL-05). NULL coords if it can't be found.
-        list($reqLat, $reqLng) = bl_geocode($hospitalName . ', ' . $location);
+        // A registered blood bank's own coordinates are exact; free-text geocoding of a
+        // hospital name can land kilometres away and skew every donor distance.
+        $bankStmt = mysqli_prepare($db_conn, "SELECT latitude, longitude FROM blood_banks WHERE LOWER(TRIM(name)) = LOWER(TRIM(?)) AND latitude IS NOT NULL LIMIT 1");
+        mysqli_stmt_bind_param($bankStmt, "s", $hospitalName);
+        mysqli_stmt_execute($bankStmt);
+        $bankRow = mysqli_fetch_assoc(mysqli_stmt_get_result($bankStmt));
+        mysqli_stmt_close($bankStmt);
+        list($reqLat, $reqLng) = $bankRow
+            ? [(float)$bankRow['latitude'], (float)$bankRow['longitude']]
+            : bl_geocode($hospitalName . ', ' . $location);
 
         // Emergency priority score (0..100) drives the Emergency Board ordering.
         $ops = new operations();
@@ -229,9 +238,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <div class="rb-grid">
                                 <div class="rb-field rb-span-12">
                                     <label>Hospital Name</label>
-                                    <input type="text" name="hospital_name" required form="rbForm"
+                                    <input type="text" name="hospital_name" required form="rbForm" list="bankNames" autocomplete="off"
                                            placeholder="e.g. Barau Dikko Teaching Hospital"
                                            value="<?php echo htmlspecialchars($_POST['hospital_name'] ?? ''); ?>">
+                                    <datalist id="bankNames">
+                                        <?php $bn = mysqli_query($db_conn, "SELECT name FROM blood_banks ORDER BY name");
+                                        while ($bn && ($b = mysqli_fetch_assoc($bn))): ?>
+                                            <option value="<?= htmlspecialchars($b['name']) ?>">
+                                        <?php endwhile; ?>
+                                    </datalist>
+                                    <small style="color:#888;">Pick a registered blood bank to pin the request to its exact location.</small>
                                 </div>
                                 <div class="rb-field rb-span-6">
                                     <label>Location / City</label>

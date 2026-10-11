@@ -9,6 +9,7 @@
 --  3. Adds the notifications (bell) and contact_messages (admin inbox) tables.
 --  4. Drops tables left over from the student-logbook (SIWES) version and the
 --     old donor/recipient split — nothing in BloodLink uses them.
+--  5. Requests at a registered bank get that bank's exact coordinates.
 --
 --  Run:  mysql -u root -p donor_app < db/upgrade_2026_10_qa.sql   (safe to re-run)
 -- ============================================================================
@@ -74,3 +75,10 @@ DROP TABLE IF EXISTS `attendance`, `chat_messages`, `logbook_entries`, `projects
                      `staff`, `students`, `weekly_summaries`, `allocation`, `timetable`,
                      `donors`, `recipients`;
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- Requests filed at a registered blood bank take that bank's exact coordinates
+-- (free-text geocoding of the hospital name could land kilometres away).
+UPDATE blood_requests br
+JOIN blood_banks bb ON LOWER(TRIM(bb.name)) = LOWER(TRIM(br.hospital_name))
+SET br.latitude = bb.latitude, br.longitude = bb.longitude
+WHERE bb.latitude IS NOT NULL;
