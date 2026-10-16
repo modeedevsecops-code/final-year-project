@@ -168,6 +168,7 @@ switch ($_SESSION['role'] ?? '') {
             <li><a class="nav-link <?php echo $current_page=='blood_requests.php'?'active':''; ?>" href="blood_requests.php"><i class="fas fa-hand-holding-medical"></i> Blood Requests</a></li>
             <li><a class="nav-link <?php echo $current_page=='emergency_board.php'?'active':''; ?>" href="emergency_board.php"><i class="fas fa-triangle-exclamation"></i> Emergency Board</a></li>
             <li><a class="nav-link <?php echo $current_page=='find_donors.php'?'active':''; ?>" href="find_donors.php"><i class="fas fa-magnifying-glass"></i> Find Donors</a></li>
+            <li><a class="nav-link <?php echo $current_page=='screen_donor.php'?'active':''; ?>" href="screen_donor.php"><i class="fas fa-stethoscope"></i> Screen Donor</a></li>
             <li><a class="nav-link <?php echo $current_page=='record_donation.php'?'active':''; ?>" href="record_donation.php"><i class="fas fa-tint"></i> Record Donation</a></li>
             <li><a class="nav-link <?php echo $current_page=='notices.php'?'active':''; ?>" href="notices.php"><i class="fas fa-bell"></i> Emergency Alerts</a></li>
             <li><a class="nav-link <?php echo $current_page=='geo_map.php'?'active':''; ?>" href="geo_map.php"><i class="fas fa-map-marker-alt"></i> Geo-Map</a></li>
@@ -178,6 +179,7 @@ switch ($_SESSION['role'] ?? '') {
         ?>
             <li><a class="nav-link <?php echo $current_page=='member_dashboard.php'?'active':''; ?>" href="member_dashboard.php"><i class="fas fa-home"></i> Dashboard</a></li>
             <li><a class="nav-link <?php echo $current_page=='donation_form.php'?'active':''; ?>" href="donation_form.php"><i class="fas fa-tint"></i> Donate Blood</a></li>
+            <li><a class="nav-link <?php echo $current_page=='screening.php'?'active':''; ?>" href="screening.php"><i class="fas fa-stethoscope"></i> Health Check</a></li>
             <li><a class="nav-link <?php echo $current_page=='request_blood.php'?'active':''; ?>" href="request_blood.php"><i class="fas fa-hand-holding-medical"></i> Request Blood</a></li>
             <li><a class="nav-link <?php echo $current_page=='request_history.php'?'active':''; ?>" href="request_history.php"><i class="fas fa-history"></i> Request History</a></li>
             <li><a class="nav-link <?php echo $current_page=='my_donations.php'?'active':''; ?>" href="my_donations.php"><i class="fas fa-award"></i> My Donations</a></li>

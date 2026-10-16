@@ -89,6 +89,7 @@ $groups = ['A+','A-','B+','B-','AB+','AB-','O+','O-'];
               <td style="padding:10px;"><span class="badge-pill" style="background:#eef2f5;color:#3f6b7a;"><?= (int)$d['compatibility_score'] ?></span></td>
               <td style="padding:10px;">
                 <?php if ($d['eligible']): ?><span class="badge-pill" style="background:#eaf3ee;color:#2c6a4a;">Eligible</span>
+                <?php elseif (!empty($d['deferred'])): ?><span class="badge-pill" style="background:#f1f1f3;color:#555;">Deferred</span>
                 <?php else: ?><span class="badge-pill" style="background:#fbf3e6;color:#a9660a;">In window</span><?php endif; ?>
               </td>
               <td style="padding:10px; font-size:.85rem;">

@@ -6,6 +6,9 @@
 --    DAY 30 -> NOT eligible · DAY 55 -> NOT eligible · DAY 56 -> eligible · NULL -> eligible
 --  All eight blood groups are represented for ABO/Rh compatibility testing.
 --
+--  Screening: donor_screenings rows at the end (one member pre-cleared, one
+--  self-check only, one deferred).
+--
 --  NEW in v3: blood_banks (5 real Kaduna/Kano/Zaria facilities with coordinates),
 --  officers belong to a bank, and blood_stock / stock_alerts are per bank.
 --
@@ -29,6 +32,7 @@ TRUNCATE TABLE `contact_messages`;
 TRUNCATE TABLE `stock_alerts`;
 TRUNCATE TABLE `blood_stock`;
 TRUNCATE TABLE `donations`;
+TRUNCATE TABLE `donor_screenings`;
 TRUNCATE TABLE `notices`;
 TRUNCATE TABLE `blood_requests`;
 TRUNCATE TABLE `members`;
@@ -145,3 +149,20 @@ INSERT INTO `contact_messages` (`name`,`email`,`subject`,`message`) VALUES
 ('Dr. Bala Usman', 'bala.usman@example.test', 'Partnership enquiry',
  'Our hospital in Zaria would like to register as a partner blood bank. Who should we speak to about getting set up on BloodLink?');
 
+-- ---------------------------------------------------- donor_screenings ---
+-- Zainab (O-) did the online self-check yesterday and was screened by Maryam at
+-- Barau Dikko today, so she can be confirmed against request #1 straight away.
+-- Kamalu has only done the self-check: an officer must screen him before a
+-- walk-in donation. Grace's self-check flagged malaria three days ago, so she is
+-- deferred for 28 days and left out of donor matching.
+INSERT INTO `donor_screenings`
+(`member_id`,`source`,`officer_id`,`blood_bank_id`,`answers`,`sex`,`genotype`,`weight_kg`,`hemoglobin_g_dl`,`bp_systolic`,`bp_diastolic`,`pulse_bpm`,`temperature_c`,
+ `hiv_result`,`hbsag_result`,`hcv_result`,`syphilis_result`,`malaria_result`,`outcome`,`deferral_reasons`,`deferred_until`,`screened_at`) VALUES
+(1, 'self',    NULL, NULL, '{"unwell":"no","age_ok":"yes","weight_ok":"yes","hiv_hep":"no","blood_disorder":"no","chronic":"no","injected_drugs":"no","risk_partner":"no","malaria":"no","antibiotics":"no","tattoo":"no","transfusion":"no","surgery":"no","pregnant":"no"}', 'female', 'AA', NULL, NULL, NULL, NULL, NULL, NULL,
+ 'not_tested','not_tested','not_tested','not_tested','not_tested', 'eligible', NULL, NULL, NOW() - INTERVAL 1 DAY),
+(1, 'officer', 1, 1,       '{"unwell":"no","age_ok":"yes","weight_ok":"yes","hiv_hep":"no","blood_disorder":"no","chronic":"no","injected_drugs":"no","risk_partner":"no","malaria":"no","antibiotics":"no","tattoo":"no","transfusion":"no","surgery":"no","pregnant":"no"}', 'female', 'AA', 61.0, 13.4, 118, 76, 72, 36.6,
+ 'negative','negative','negative','negative','negative', 'eligible', NULL, NULL, NOW()),
+(2, 'self',    NULL, NULL, '{"unwell":"no","age_ok":"yes","weight_ok":"yes","hiv_hep":"no","blood_disorder":"no","chronic":"no","injected_drugs":"no","risk_partner":"no","malaria":"no","antibiotics":"no","tattoo":"no","transfusion":"no","surgery":"no"}', 'male', 'AS', NULL, NULL, NULL, NULL, NULL, NULL,
+ 'not_tested','not_tested','not_tested','not_tested','not_tested', 'eligible', NULL, NULL, NOW()),
+(9, 'self',    NULL, NULL, '{"unwell":"no","age_ok":"yes","weight_ok":"yes","hiv_hep":"no","blood_disorder":"no","chronic":"no","injected_drugs":"no","risk_partner":"no","malaria":"yes","antibiotics":"no","tattoo":"no","transfusion":"no","surgery":"no","pregnant":"no"}', 'female', 'unknown', NULL, NULL, NULL, NULL, NULL, NULL,
+ 'not_tested','not_tested','not_tested','not_tested','not_tested', 'temporary_deferral', 'Malaria in the last 4 weeks', CURDATE() + INTERVAL 25 DAY, NOW() - INTERVAL 3 DAY);
