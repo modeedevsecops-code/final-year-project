@@ -105,12 +105,13 @@ public function search_donors($blood_group, $mode = 'compatible', $available_onl
     }
     $avail = $available_only ? "AND is_available = 1" : "";
     $q = "SELECT member_id AS donor_id, name, email, phone, blood_group, last_donation_date, is_available,
-                 availability_schedule, contact_preference, latitude, longitude, $dist
+                 availability_schedule, contact_preference, latitude, longitude, $dist,
+                 " . bl_deferred_sql('members.member_id') . " AS deferred
           FROM members WHERE blood_group IN ($in) $avail";
     $res = mysqli_query($db->connection, $q);
     $rows = $res ? mysqli_fetch_all($res, MYSQLI_ASSOC) : [];
     foreach ($rows as &$r) {
-        $r['eligible'] = $this->is_donor_eligible($r['last_donation_date']) ? 1 : 0;
+        $r['eligible'] = (!$r['deferred'] && $this->is_donor_eligible($r['last_donation_date'])) ? 1 : 0;
         $r['compatibility_score'] = $this->compatibility_score($r['blood_group'], $blood_group);
     }
     unset($r);
@@ -509,6 +510,7 @@ public function update_donor($member_id) {
                 WHERE blood_group IN ($in_clause)
                   AND (last_donation_date IS NULL
                        OR DATEDIFF(CURDATE(), last_donation_date) >= " . self::DONATION_ELIGIBILITY_DAYS . ")
+                  AND NOT " . bl_deferred_sql('members.member_id') . "
                   $exclude_sql
                   $radius_clause
             ";
@@ -521,6 +523,7 @@ public function update_donor($member_id) {
                        NULL AS distance_km
                 FROM members
                 WHERE blood_group IN ($in_clause) $exclude_sql
+                  AND NOT " . bl_deferred_sql('members.member_id') . "
                 HAVING last_donation_date IS NULL
                        OR days_since_last_donation >= " . self::DONATION_ELIGIBILITY_DAYS . "
             ";
@@ -621,11 +624,22 @@ public function update_donor($member_id) {
                 $new_status = ($already + $units >= (int)$request['units_needed']) ? 'Fulfilled' : 'Approved';
             }
 
+            // Health screening: no active deferral, and an eligible officer screening today.
+            $deferral = bl_active_deferral($conn, $donor_id);
+            if ($deferral) {
+                return $fail('This donor is deferred from donating (' . strtolower(bl_deferral_label($deferral)) . ').');
+            }
+            $screening = bl_screening_for_donation($conn, $donor_id);
+            if (!$screening) {
+                return $fail('This donor has not passed a health screening today. Screen them before recording the donation.');
+            }
+            $screening_id = (int)$screening['screening_id'];
+
             $today = date('Y-m-d');
             $bg    = $donor['blood_group'];
-            $stmt = mysqli_prepare($conn, "INSERT INTO donations (donor_id, recipient_id, request_id, officer_id, blood_bank_id, blood_group, units, donation_date, status)
-                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Completed')");
-            mysqli_stmt_bind_param($stmt, "iiiiisis", $donor_id, $recipient_id, $request_id, $officer_id, $bank_id, $bg, $units, $today);
+            $stmt = mysqli_prepare($conn, "INSERT INTO donations (donor_id, recipient_id, request_id, officer_id, blood_bank_id, blood_group, units, donation_date, status, screening_id)
+                                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Completed', ?)");
+            mysqli_stmt_bind_param($stmt, "iiiiisisi", $donor_id, $recipient_id, $request_id, $officer_id, $bank_id, $bg, $units, $today, $screening_id);
             mysqli_stmt_execute($stmt);
             $donation_id = mysqli_insert_id($conn);
             mysqli_stmt_close($stmt);
@@ -1238,7 +1252,8 @@ if (!function_exists('bl_eligible_donor_ids')) {
         $in = "'" . implode("','", array_map(function ($t) use ($conn) { return mysqli_real_escape_string($conn, $t); }, $types)) . "'";
         $r = mysqli_query($conn, "SELECT member_id FROM members
                                   WHERE blood_group IN ($in) AND is_available = 1 AND member_id <> " . intval($exclude_member_id) . "
-                                    AND (last_donation_date IS NULL OR DATEDIFF(CURDATE(), last_donation_date) >= 56)");
+                                    AND (last_donation_date IS NULL OR DATEDIFF(CURDATE(), last_donation_date) >= 56)
+                                    AND NOT " . bl_deferred_sql('members.member_id'));
         return $r ? array_column(mysqli_fetch_all($r, MYSQLI_ASSOC), 'member_id') : [];
     }
 }
@@ -1247,6 +1262,192 @@ if (!function_exists('bl_notification_icon')) {
     function bl_notification_icon($type) {
         return ['request_new' => 'fa-hand-holding-medical', 'request_status' => 'fa-clipboard-check', 'donation' => 'fa-tint',
                 'emergency' => 'fa-triangle-exclamation', 'low_stock' => 'fa-flask', 'member_new' => 'fa-user-plus',
-                'contact' => 'fa-envelope', 'alert' => 'fa-bell'][$type] ?? 'fa-bell';
+                'contact' => 'fa-envelope', 'alert' => 'fa-bell', 'screening' => 'fa-stethoscope'][$type] ?? 'fa-bell';
+    }
+}
+
+// ===================== DONOR HEALTH SCREENING =====================
+//
+// Before a donation is recorded the donor is screened. Members can do a
+// self-check online (health questionnaire only); at the bank an officer goes
+// through the questionnaire again, takes vital signs and runs the rapid tests
+// for blood-borne infections. bl_evaluate_screening() turns that into an
+// outcome: eligible, a temporary deferral (until a date) or a permanent one.
+// The rules follow common blood-service donor-selection criteria (WHO / NBTS)
+// and are kept here in one place so the officer page, the self-check and the
+// matching all agree.
+
+if (!defined('BL_TTI_TESTS')) {
+    // Transfusion-transmissible infections tested at the bank.
+    define('BL_TTI_TESTS', ['hiv_result' => 'HIV', 'hbsag_result' => 'Hepatitis B (HBsAg)', 'hcv_result' => 'Hepatitis C (anti-HCV)',
+                            'syphilis_result' => 'Syphilis', 'malaria_result' => 'Malaria parasite']);
+}
+
+if (!function_exists('bl_screening_questions')) {
+    // key => [question, days deferred if the answer is the "defer" answer (-1 = permanent), reason, defer on, female only]
+    function bl_screening_questions() {
+        return [
+            'unwell'         => ['Are you feeling unwell today (fever, cold, cough, diarrhoea)?', 14, 'Unwell on the day', 'yes', false],
+            'age_ok'         => ['Are you between 18 and 65 years old?', 365, 'Outside the 18–65 donor age range', 'no', false],
+            'weight_ok'      => ['Do you weigh at least 50 kg?', 90, 'Weight under 50 kg', 'no', false],
+            'hiv_hep'        => ['Have you ever tested positive for HIV, hepatitis B or hepatitis C?', -1, 'Previous positive HIV or hepatitis test', 'yes', false],
+            'blood_disorder' => ['Do you have sickle cell disease, haemophilia or another bleeding disorder?', -1, 'Blood disorder (sickle cell disease or bleeding disorder)', 'yes', false],
+            'chronic'        => ['Do you have heart disease, epilepsy, cancer, kidney disease or insulin-treated diabetes?', -1, 'Serious chronic illness', 'yes', false],
+            'injected_drugs' => ['Have you ever injected drugs that were not prescribed to you?', -1, 'Injected non-prescribed drugs', 'yes', false],
+            'risk_partner'   => ['In the last 12 months, have you had sexual contact with someone who has HIV or hepatitis?', 365, 'Recent contact with HIV or hepatitis', 'yes', false],
+            'malaria'        => ['Have you had malaria or malaria treatment in the last 4 weeks?', 28, 'Malaria in the last 4 weeks', 'yes', false],
+            'antibiotics'    => ['Have you taken antibiotics in the last 7 days?', 7, 'Antibiotics in the last 7 days', 'yes', false],
+            'tattoo'         => ['Have you had a tattoo, piercing or acupuncture in the last 6 months?', 182, 'Tattoo, piercing or acupuncture in the last 6 months', 'yes', false],
+            'transfusion'    => ['Have you received a blood transfusion in the last 12 months?', 365, 'Blood transfusion in the last 12 months', 'yes', false],
+            'surgery'        => ['Have you had major surgery in the last 6 months?', 182, 'Major surgery in the last 6 months', 'yes', false],
+            'pregnant'       => ['Are you pregnant, or have you given birth or breastfed in the last 6 months?', 182, 'Pregnancy, recent birth or breastfeeding', 'yes', true],
+        ];
+    }
+}
+
+if (!function_exists('bl_evaluate_screening')) {
+    // $s: answers (key => yes/no), sex, genotype, and for an officer screening
+    // the vitals and test results. Returns [outcome, reasons[], deferred_until|null, errors[]].
+    function bl_evaluate_screening(array $s, $officer) {
+        $errors = []; $perm = []; $temp = [];   // $temp: reason => days
+        $sex = $s['sex'] ?? null;
+        if (!in_array($sex, ['male', 'female'], true)) $errors[] = 'Select the donor\'s sex.';
+        foreach (bl_screening_questions() as $k => [$q, $days, $reason, $deferOn, $femaleOnly]) {
+            if ($femaleOnly && $sex !== 'female') continue;
+            $a = $s['answers'][$k] ?? null;
+            if (!in_array($a, ['yes', 'no'], true)) { $errors[] = 'Answer every question (' . $q . ')'; continue; }
+            if ($a === $deferOn) { if ($days < 0) $perm[] = $reason; else $temp[$reason] = $days; }
+        }
+        $g = $s['genotype'] ?? 'unknown';
+        if (!in_array($g, ['AA', 'AS', 'AC', 'SS', 'SC', 'unknown'], true)) $errors[] = 'Select a valid genotype.';
+        if (in_array($g, ['SS', 'SC'], true)) $perm[] = 'Sickle cell disease (genotype ' . $g . ')';
+
+        if ($officer) {
+            $num = function ($k, $label, $min, $max) use ($s, &$errors) {
+                $v = $s[$k] ?? '';
+                if ($v === '' || !is_numeric($v) || $v < $min || $v > $max) { $errors[] = "Enter the $label."; return null; }
+                return (float)$v;
+            };
+            $w   = $num('weight_kg', 'weight (kg)', 20, 250);
+            $hb  = $num('hemoglobin_g_dl', 'haemoglobin (g/dL)', 3, 25);
+            $sys = $num('bp_systolic', 'systolic blood pressure', 50, 260);
+            $dia = $num('bp_diastolic', 'diastolic blood pressure', 30, 160);
+            $pul = $num('pulse_bpm', 'pulse (beats/min)', 20, 220);
+            $tmp = $num('temperature_c', 'temperature (°C)', 30, 45);
+            if ($w !== null && $w < 50) $temp['Weight ' . $w . ' kg is under 50 kg'] = 90;
+            $hbMin = $sex === 'female' ? 12.5 : 13.0;
+            if ($hb !== null && $hb < $hbMin) $temp['Haemoglobin ' . $hb . ' g/dL is below ' . $hbMin] = 28;
+            if ($sys !== null && $dia !== null && ($sys < 100 || $sys > 180 || $dia < 60 || $dia > 100)) $temp["Blood pressure $sys/$dia is outside 100–180 / 60–100"] = 7;
+            if ($pul !== null && ($pul < 50 || $pul > 100)) $temp["Pulse $pul is outside 50–100"] = 7;
+            if ($tmp !== null && $tmp > 37.5) $temp["Temperature $tmp °C (fever)"] = 14;
+            foreach (BL_TTI_TESTS as $k => $label) {
+                $r = $s[$k] ?? '';
+                if (!in_array($r, ['negative', 'positive'], true)) { $errors[] = "Record the $label test result."; continue; }
+                if ($r !== 'positive') continue;
+                if ($k === 'syphilis_result') $temp['Reactive syphilis test'] = 365;
+                elseif ($k === 'malaria_result') $temp['Malaria parasites seen'] = 28;
+                else $perm[] = 'Reactive ' . $label . ' test';
+            }
+        }
+        if ($errors) return [null, [], null, $errors];
+        if ($perm) return ['permanent_deferral', array_merge($perm, array_keys($temp)), null, []];
+        if ($temp) return ['temporary_deferral', array_keys($temp), date('Y-m-d', strtotime('+' . max($temp) . ' days')), []];
+        return ['eligible', [], null, []];
+    }
+}
+
+if (!function_exists('bl_save_screening')) {
+    // Validates, evaluates and stores a screening. Returns [screening_id|null, outcome, reasons, until, errors].
+    function bl_save_screening($conn, $member_id, array $s, $officer_id = null, $bank_id = null) {
+        $officer = (bool)$officer_id;
+        [$outcome, $reasons, $until, $errors] = bl_evaluate_screening($s, $officer);
+        if ($errors) return [null, null, [], null, $errors];
+        $answers = [];
+        foreach (bl_screening_questions() as $k => $_) { if (isset($s['answers'][$k])) $answers[$k] = $s['answers'][$k]; }
+        $json = json_encode($answers);
+        $src  = $officer ? 'officer' : 'self';
+        $g    = $s['genotype'] ?? 'unknown';
+        $v = function ($k) use ($s, $officer) { return $officer && isset($s[$k]) && $s[$k] !== '' ? $s[$k] : null; };
+        $t = function ($k) use ($s, $officer) { return $officer ? $s[$k] : 'not_tested'; };
+        $reasonText = $reasons ? mb_substr(implode('; ', $reasons), 0, 500) : null;
+        $notes = isset($s['notes']) && trim($s['notes']) !== '' ? mb_substr(trim($s['notes']), 0, 500) : null;
+        $stmt = mysqli_prepare($conn, "INSERT INTO donor_screenings
+            (member_id, source, officer_id, blood_bank_id, answers, sex, genotype, weight_kg, hemoglobin_g_dl, bp_systolic, bp_diastolic, pulse_bpm, temperature_c,
+             hiv_result, hbsag_result, hcv_result, syphilis_result, malaria_result, outcome, deferral_reasons, deferred_until, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+        $mid = intval($member_id); $oid = $officer ? intval($officer_id) : null; $bid = $bank_id ? intval($bank_id) : null;
+        $w = $v('weight_kg'); $hb = $v('hemoglobin_g_dl'); $sy = $v('bp_systolic'); $di = $v('bp_diastolic'); $pu = $v('pulse_bpm'); $te = $v('temperature_c');
+        $hiv = $t('hiv_result'); $hbs = $t('hbsag_result'); $hcv = $t('hcv_result'); $syp = $t('syphilis_result'); $mal = $t('malaria_result');
+        $sex = $s['sex'];
+        mysqli_stmt_bind_param($stmt, "isiisssddiiidsssssssss", $mid, $src, $oid, $bid, $json, $sex, $g, $w, $hb, $sy, $di, $pu, $te,
+                               $hiv, $hbs, $hcv, $syp, $mal, $outcome, $reasonText, $until, $notes);
+        mysqli_stmt_execute($stmt);
+        $id = mysqli_insert_id($conn);
+        mysqli_stmt_close($stmt);
+        return [$id, $outcome, $reasons, $until, []];
+    }
+}
+
+if (!function_exists('bl_deferred_sql')) {
+    // SQL condition: the member in column $col currently has an active deferral.
+    //  - any permanent deferral from an officer screening, or
+    //  - the latest officer screening deferred them and the date hasn't passed, or
+    //  - their latest screening of all is a self-check that flagged a deferral
+    //    (a later officer screening overrides what the member declared).
+    function bl_deferred_sql($col) {
+        $active = "(s.outcome = 'permanent_deferral' OR (s.outcome = 'temporary_deferral' AND s.deferred_until > CURDATE()))";
+        return "(EXISTS (SELECT 1 FROM donor_screenings s WHERE s.member_id = $col AND s.source = 'officer' AND s.outcome = 'permanent_deferral')
+             OR EXISTS (SELECT 1 FROM donor_screenings s WHERE s.member_id = $col AND s.source = 'officer' AND $active
+                          AND s.screening_id = (SELECT MAX(x.screening_id) FROM donor_screenings x WHERE x.member_id = s.member_id AND x.source = 'officer'))
+             OR EXISTS (SELECT 1 FROM donor_screenings s WHERE s.member_id = $col AND s.source = 'self' AND $active
+                          AND s.screening_id = (SELECT MAX(x.screening_id) FROM donor_screenings x WHERE x.member_id = s.member_id)))";
+    }
+}
+
+if (!function_exists('bl_active_deferral')) {
+    // The screening behind a member's current deferral (permanent first), or null.
+    function bl_active_deferral($conn, $member_id) {
+        $id = intval($member_id);
+        $active = "(s.outcome = 'permanent_deferral' OR (s.outcome = 'temporary_deferral' AND s.deferred_until > CURDATE()))";
+        $r = mysqli_query($conn, "SELECT s.* FROM donor_screenings s
+            WHERE s.member_id = $id AND $active AND (
+                 (s.source = 'officer' AND (s.outcome = 'permanent_deferral'
+                    OR s.screening_id = (SELECT MAX(x.screening_id) FROM donor_screenings x WHERE x.member_id = $id AND x.source = 'officer')))
+              OR (s.source = 'self' AND s.screening_id = (SELECT MAX(x.screening_id) FROM donor_screenings x WHERE x.member_id = $id)))
+            ORDER BY s.outcome = 'permanent_deferral' DESC, s.deferred_until DESC LIMIT 1");
+        return $r ? mysqli_fetch_assoc($r) : null;
+    }
+}
+
+if (!function_exists('bl_screening_for_donation')) {
+    // Today's officer screening that clears this member to donate: it must be
+    // their latest officer screening, from today, eligible, and not yet used.
+    function bl_screening_for_donation($conn, $member_id) {
+        $id = intval($member_id);
+        $r = mysqli_query($conn, "SELECT s.* FROM donor_screenings s
+            WHERE s.member_id = $id AND s.source = 'officer' AND s.outcome = 'eligible' AND DATE(s.screened_at) = CURDATE()
+              AND s.screening_id = (SELECT MAX(x.screening_id) FROM donor_screenings x WHERE x.member_id = $id AND x.source = 'officer')
+              AND NOT EXISTS (SELECT 1 FROM donations d WHERE d.screening_id = s.screening_id)
+            LIMIT 1");
+        return $r ? mysqli_fetch_assoc($r) : null;
+    }
+}
+
+if (!function_exists('bl_latest_screening')) {
+    function bl_latest_screening($conn, $member_id, $source = null) {
+        $id = intval($member_id);
+        $src = $source ? " AND source = '" . ($source === 'officer' ? 'officer' : 'self') . "'" : '';
+        $r = mysqli_query($conn, "SELECT * FROM donor_screenings WHERE member_id = $id$src ORDER BY screening_id DESC LIMIT 1");
+        return $r ? mysqli_fetch_assoc($r) : null;
+    }
+}
+
+if (!function_exists('bl_deferral_label')) {
+    // Short, member-safe description of a deferral (no test details).
+    function bl_deferral_label($row) {
+        if (!$row) return '';
+        return $row['outcome'] === 'permanent_deferral'
+            ? 'Not able to donate'
+            : 'Deferred until ' . date('j M Y', strtotime($row['deferred_until']));
     }
 }

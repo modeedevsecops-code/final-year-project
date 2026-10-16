@@ -37,6 +37,8 @@ if (!empty($me['blood_group'])) {
         $help[] = $r;
     }
 }
+$deferral    = bl_active_deferral($conn, $member_id);
+$self_check  = bl_latest_screening($conn, $member_id, 'self');
 $urgency_badge = ['Critical Emergency' => 'bl-badge-red', 'Urgent' => 'bl-badge-amber', 'Normal' => 'bl-badge-blue'];
 $ring_color = $eligible ? '#2c8a4a' : '#cc0000';
 $circ = 2 * M_PI * 62;
@@ -121,12 +123,19 @@ $circ = 2 * M_PI * 62;
                   : '<span class="bl-badge bl-badge-grey"><span class="bl-dot"></span> Not available</span>' ?></dd>
           <dt>Schedule</dt><dd><?= htmlspecialchars(ucfirst($me['availability_schedule'] ?? 'anytime')) ?></dd>
           <dt>Contact by</dt><dd><?= htmlspecialchars(ucfirst($me['contact_preference'] ?? 'both')) ?></dd>
+          <dt>Health check</dt>
+          <dd><?php if ($deferral): ?><span class="bl-badge <?= $deferral['outcome'] === 'permanent_deferral' ? 'bl-badge-red' : 'bl-badge-amber' ?>"><span class="bl-dot"></span> <?= htmlspecialchars(bl_deferral_label($deferral)) ?></span>
+              <?php elseif ($self_check): ?><span class="bl-badge bl-badge-green"><span class="bl-dot"></span> Done <?= htmlspecialchars(date('j M', strtotime($self_check['screened_at']))) ?></span> <a href="screening.php">Redo</a>
+              <?php else: ?><a href="screening.php">Take the 1-minute check</a><?php endif; ?></dd>
           <dt>Location</dt><dd><?= is_numeric($me['latitude'] ?? null) ? htmlspecialchars($me['address'] ?? 'On the map') : '<a href="profile.php">Add your address</a>' ?></dd>
         </dl>
         <div class="bl-grid bl-grid-2" style="gap:.75rem;">
           <div class="bl-stat"><div class="bl-stat-icon"><i class="fas fa-tint"></i></div><div><div class="bl-stat-value"><?= (int)$totals['n'] ?></div><div class="bl-stat-label">Donations</div></div></div>
           <div class="bl-stat"><div class="bl-stat-icon"><i class="fas fa-flask"></i></div><div><div class="bl-stat-value"><?= (int)$totals['u'] ?></div><div class="bl-stat-label">Units given</div></div></div>
         </div>
+        <?php if ($deferral): ?>
+          <div class="bl-notice bl-notice-warn" style="margin:1rem 0 0;"><i class="fas fa-hourglass-half"></i><div>You're not being matched to requests right now because of your health screening. <a href="screening.php">See details</a></div></div>
+        <?php endif; ?>
         <?php if (empty($me['is_available'])): ?>
           <div class="bl-notice bl-notice-warn" style="margin:1rem 0 0;"><i class="fas fa-circle-info"></i><div>Officers can't match you while you're marked unavailable. Turn availability on from your dashboard when you're ready.</div></div>
         <?php endif; ?>
@@ -174,10 +183,11 @@ $circ = 2 * M_PI * 62;
     <div class="bl-grid bl-grid-main">
       <section class="bl-card" style="margin-bottom:0;">
         <h2 class="bl-card-title" style="margin-bottom:1rem;"><i class="fas fa-route"></i> How donating works</h2>
-        <ol class="bl-steps" style="grid-template-columns:1fr 1fr;">
+        <ol class="bl-steps bl-steps-5">
           <li><strong>Stay available</strong><span>Keep your availability on so officers can find you when someone needs your blood type.</span></li>
           <li><strong>Get matched</strong><span>An officer matches you to a request and contacts you by your preferred method.</span></li>
-          <li><strong>Donate at the bank</strong><span>Go to the blood bank; the officer confirms and records your donation.</span></li>
+          <li><strong>Get screened</strong><span>At the bank an officer checks your health, vital signs and blood tests. Do the <a href="screening.php">health check</a> first to know before you go.</span></li>
+          <li><strong>Donate</strong><span>If you pass, you donate and the officer records it.</span></li>
           <li><strong>Recover for 56 days</strong><span>You'll see it under My Donations, and this page counts down to your next one.</span></li>
         </ol>
       </section>
@@ -189,7 +199,10 @@ $circ = 2 * M_PI * 62;
           <li><i class="fas fa-check-circle"></i>Bring your Member ID (<?= htmlspecialchars($me['member_code'] ?? '') ?>) and a photo ID.</li>
           <li><i class="fas fa-check-circle"></i>Tell the officer about any illness, medication or recent travel.</li>
         </ul>
-        <a href="my_donations.php" class="bl-btn bl-btn-outline bl-btn-sm" style="margin-top:1rem;"><i class="fas fa-award"></i> View my donations</a>
+        <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:1rem;">
+          <a href="screening.php" class="bl-btn bl-btn-primary bl-btn-sm"><i class="fas fa-stethoscope"></i> Take the health check</a>
+          <a href="my_donations.php" class="bl-btn bl-btn-outline bl-btn-sm"><i class="fas fa-award"></i> View my donations</a>
+        </div>
       </section>
     </div>
 

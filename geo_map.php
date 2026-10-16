@@ -22,6 +22,22 @@ $res = mysqli_query($conn,
      ORDER BY bb.name ASC");
 if ($res) { while ($r = mysqli_fetch_assoc($res)) { $banks[] = $r; } }
 $banks_json = json_encode($banks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
+
+// Where to put the pin before (or without) GPS: a member's registered address,
+// an officer's own blood bank. Admins start with no pin.
+$home = null;
+if ($_SESSION['role'] === 'member') {
+    $me = $ops->get_donor_by_id(intval($_SESSION['member_id'] ?? 0));
+    if ($me && is_numeric($me['latitude']) && is_numeric($me['longitude'])) {
+        $home = ['lat' => (float)$me['latitude'], 'lng' => (float)$me['longitude'], 'label' => 'Your registered address' . ($me['address'] ? ' (' . $me['address'] . ')' : '')];
+    }
+} elseif ($_SESSION['role'] === 'officer') {
+    $r = mysqli_query($conn, "SELECT bb.name, bb.latitude, bb.longitude FROM hospital_workers hw JOIN blood_banks bb ON bb.bank_id = hw.blood_bank_id
+                              WHERE hw.worker_id = " . intval($_SESSION['officer_id'] ?? 0));
+    $ob = $r ? mysqli_fetch_assoc($r) : null;
+    if ($ob && is_numeric($ob['latitude'])) $home = ['lat' => (float)$ob['latitude'], 'lng' => (float)$ob['longitude'], 'label' => 'Your blood bank (' . $ob['name'] . ')'];
+}
+$home_json = json_encode($home, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP);
 ?>
 <!DOCTYPE html>
 <html lang="en-US" dir="ltr">
@@ -74,6 +90,10 @@ $banks_json = json_encode($banks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT |
     .route-steps li { margin-bottom:4px; color:#333; }
     .route-steps li span { color:#888; }
     .map-hint { font-size:.8rem; color:#666; }
+    .loc-notice { display:none; gap:10px; align-items:flex-start; background:#fbf3e6; border:1px solid #f0dcb9; color:#7a4a06; border-radius:10px; padding:10px 12px; margin-bottom:12px; font-size:.85rem; }
+    .loc-notice.show { display:flex; }
+    .loc-notice i { margin-top:3px; }
+    .loc-notice a { color:#7a4a06; font-weight:700; }
   </style>
 </head>
 <body>
@@ -103,6 +123,8 @@ $banks_json = json_encode($banks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT |
       <span class="map-hint"><i class="fas fa-hand-pointer"></i> or click anywhere on the map to drop your pin — drag it to adjust.</span>
       <span id="locStatus" style="color:#888; font-size:.85rem;"></span>
     </div>
+
+    <div class="loc-notice" id="locNotice" role="status"><i class="fas fa-circle-info"></i><div id="locNoticeText"></div></div>
 
     <div class="loc-grid">
       <div class="rank-panel">
@@ -341,14 +363,65 @@ $banks_json = json_encode($banks, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT |
   }
   window.routeTo=routeTo; window.selectBank=selectBank;
 
-  document.getElementById('locateBtn').onclick = ()=>{
-    locStatus.textContent='Locating…';
-    map.locate({setView:false, enableHighAccuracy:true, timeout:10000});
-  };
+  // ---- Your location ----------------------------------------------------
+  // 1. The pin goes straight to the saved location (member's address / officer's bank).
+  // 2. Browsers only give GPS to secure pages (https:// or localhost). On a secure
+  //    page we ask for it right away; on plain http:// we switch to the https://
+  //    address when the server offers one, otherwise explain what's being used.
+  const HOME = <?= $home_json ?: 'null' ?>;
+  const notice = document.getElementById('locNotice'), noticeText = document.getElementById('locNoticeText');
+  const showNotice = html => { noticeText.innerHTML = html; notice.classList.add('show'); };
+  const hideNotice = () => notice.classList.remove('show');
+  const fallbackWord = HOME ? 'your saved location' : 'a pin you drop on the map';
+  const httpsUrl = () => 'https://' + location.host + location.pathname + '?locate=1';
+
+  function geoError(err, highAccuracy){
+    if (highAccuracy && err.code !== err.PERMISSION_DENIED) { return getGps(false); }   // retry without GPS hardware (Wi-Fi/IP)
+    const msg = {
+      1: '<b>Location is blocked for this site.</b> Click the icon at the left of the address bar → <b>Location</b> → <b>Allow</b>, then press <b>Use my location</b>.',
+      2: '<b>Your device couldn\'t work out where you are.</b> On a Mac, turn on <b>System Settings → Privacy &amp; Security → Location Services</b> for your browser; on a phone, turn on Location.',
+      3: '<b>Finding your location took too long.</b> Press <b>Use my location</b> to try again.'
+    }[err.code] || 'Your location is not available.';
+    showNotice(msg + ' Meanwhile the map uses ' + fallbackWord + '.');
+    locStatus.textContent = HOME ? HOME.label : 'Click the map to drop your pin.';
+  }
+  function getGps(highAccuracy = true){
+    locStatus.textContent = 'Finding your location…';
+    navigator.geolocation.getCurrentPosition(
+      p => { hideNotice(); setUser(p.coords.latitude, p.coords.longitude, 'Your current location', p.coords.accuracy); },
+      e => geoError(e, highAccuracy),
+      {enableHighAccuracy: highAccuracy, timeout: highAccuracy ? 10000 : 15000, maximumAge: 60000});
+  }
+  // Is the same site reachable over https (a trusted certificate)? Resolves true/false.
+  function httpsAvailable(){
+    if (location.protocol !== 'http:') return Promise.resolve(false);
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 2500);
+    return fetch('https://' + location.host + location.pathname.replace(/[^/]*$/, '') + 'assets/css/sidebar.css', {mode:'no-cors', cache:'no-store', signal: ctl.signal})
+      .then(() => true, () => false).finally(() => clearTimeout(t));
+  }
+  function explainInsecure(){
+    showNotice('<b>Live GPS isn\'t available on this address.</b> Browsers only share your location with secure pages (<code>https://</code>), and this site is open on <code>' + location.origin + '</code>. '
+      + (HOME ? 'Your pin is at <b>' + esc(HOME.label) + '</b>' : 'Drop your pin by clicking the map') + ' — drag it to adjust.');
+  }
+  function locateMe(auto){
+    if (!('geolocation' in navigator)) { showNotice('This browser can\'t share a location. Using ' + fallbackWord + '.'); return; }
+    if (window.isSecureContext) {
+      if (auto && navigator.permissions) {
+        navigator.permissions.query({name:'geolocation'}).then(st => {
+          if (st.state === 'denied') geoError({code:1, PERMISSION_DENIED:1}, false); else getGps(true);
+        }, () => getGps(true));
+      } else getGps(true);
+      return;
+    }
+    httpsAvailable().then(ok => { if (ok) location.replace(httpsUrl()); else explainInsecure(); });
+  }
+
+  document.getElementById('locateBtn').onclick = () => locateMe(false);
   document.getElementById('kadunaBtn').onclick = ()=> setUser(KADUNA[0],KADUNA[1],'Kaduna city centre');
   map.on('click', e => setUser(e.latlng.lat, e.latlng.lng, 'Pin dropped on the map'));
-  map.on('locationfound', e=> setUser(e.latlng.lat, e.latlng.lng, 'Your location', e.accuracy));
-  map.on('locationerror', ()=>{ locStatus.textContent='Location blocked — click the map to drop your pin, or use Kaduna centre.'; });
+
+  if (HOME) setUser(HOME.lat, HOME.lng, HOME.label);
+  locateMe(true);
 </script>
 </body>
 </html>

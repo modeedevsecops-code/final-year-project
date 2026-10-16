@@ -9,6 +9,7 @@ $conn       = $db->connection;
 $ops        = new operations();
 $officer_id = intval($_SESSION['officer_id'] ?? 0);
 $error      = null;
+$screen_link = null;   // set when the member still needs screening
 
 $bres = mysqli_query($conn, "SELECT bb.bank_id, bb.name FROM hospital_workers hw
                              LEFT JOIN blood_banks bb ON bb.bank_id = hw.blood_bank_id
@@ -36,6 +37,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['btn_record_donation']
             exit;
         }
         $error = $result['message'];
+        if (!bl_active_deferral($conn, $found['member_id']) && !bl_screening_for_donation($conn, $found['member_id'])) {
+            $screen_link = 'screen_donor.php?member_id=' . (int)$found['member_id'];
+        }
     }
 }
 $flash = $_SESSION['flash_record'] ?? null;
@@ -77,7 +81,8 @@ if ($bank && $bank['bank_id']) {
 
             <div class="quick-card" style="text-align:left; margin-bottom:24px;">
                 <?php if ($flash): ?><div class="alert alert-success"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
-                <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+                <?php if ($error): ?><div class="alert alert-danger"><?= htmlspecialchars($error) ?>
+                    <?php if ($screen_link): ?> <a href="<?= htmlspecialchars($screen_link) ?>" class="alert-link">Screen this donor now</a><?php endif; ?></div><?php endif; ?>
                 <form method="POST" class="row g-3 align-items-end"
                       onsubmit="return confirm('Record this donation and add it to your bank\'s stock?');">
                     <?php bl_csrf_field(); ?>
@@ -85,7 +90,7 @@ if ($bank && $bank['bank_id']) {
                         <label class="form-label fw-bold" for="member_lookup">Member email or Member ID</label>
                         <input type="text" class="form-control" id="member_lookup" name="member_lookup" required
                                placeholder="e.g. zainab@bloodlink.test or BL-KD-001"
-                               value="<?= $error ? htmlspecialchars($_POST['member_lookup'] ?? '') : '' ?>">
+                               value="<?= htmlspecialchars($error ? ($_POST['member_lookup'] ?? '') : ($_GET['member'] ?? '')) ?>">
                     </div>
                     <div class="col-md-3">
                         <label class="form-label fw-bold" for="units">Units</label>
@@ -95,7 +100,7 @@ if ($bank && $bank['bank_id']) {
                         <button type="submit" name="btn_record_donation" class="btn btn-danger w-100">Record Donation</button>
                     </div>
                 </form>
-                <p class="text-muted small mt-3 mb-0">The 56-day rule is checked automatically. The member's blood group comes from their profile.</p>
+                <p class="text-muted small mt-3 mb-0">The member must have passed a <a href="screen_donor.php">health screening</a> today. The 56-day rule is checked automatically, and the blood group comes from their profile.</p>
             </div>
 
             <div class="quick-card" style="text-align:left;">

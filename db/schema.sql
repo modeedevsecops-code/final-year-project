@@ -7,8 +7,8 @@
 --  them (Nominatim + OSRM).
 --
 --  Tables: login, blood_banks, hospital_workers, members,
---          blood_requests, notices, donations, blood_stock, stock_alerts,
---          notifications, contact_messages.
+--          blood_requests, notices, donor_screenings, donations, blood_stock,
+--          stock_alerts, notifications, contact_messages.
 --
 --  A `member` is a single unified account that BOTH donates (blood group,
 --  availability, 56-day clock) AND files blood requests — mirroring a real
@@ -39,6 +39,7 @@ DROP TABLE IF EXISTS `notifications`;
 DROP TABLE IF EXISTS `stock_alerts`;
 DROP TABLE IF EXISTS `blood_stock`;
 DROP TABLE IF EXISTS `donations`;
+DROP TABLE IF EXISTS `donor_screenings`;
 DROP TABLE IF EXISTS `recipients`;
 DROP TABLE IF EXISTS `notices`;
 DROP TABLE IF EXISTS `blood_requests`;
@@ -168,6 +169,52 @@ CREATE TABLE `notices` (
     REFERENCES `hospital_workers` (`worker_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
+-- ---------------------------------------------------- donor_screenings ----
+-- Pre-donation health screening. A member can fill in the health questionnaire
+-- themselves before visiting (source = 'self'); at the bank an officer repeats
+-- it and adds vital signs and the rapid tests for blood-borne infections
+-- (source = 'officer'). The outcome is computed by bl_evaluate_screening():
+-- an officer screening marked 'eligible' on the same day is required before a
+-- donation can be recorded, and an active deferral keeps the member out of
+-- donor matching until deferred_until (or for good when permanent).
+CREATE TABLE `donor_screenings` (
+  `screening_id`      INT(11) NOT NULL AUTO_INCREMENT,
+  `member_id`         INT(11) NOT NULL COMMENT 'FK -> members.member_id (the donor screened)',
+  `source`            ENUM('self','officer') NOT NULL COMMENT 'Member self-check or officer screening at the bank',
+  `officer_id`        INT(11) DEFAULT NULL COMMENT 'FK -> hospital_workers.worker_id (NULL for a self-check)',
+  `blood_bank_id`     INT(11) DEFAULT NULL COMMENT 'FK -> blood_banks.bank_id where it was done',
+  `answers`           JSON NOT NULL COMMENT 'Health questionnaire answers (question key -> yes/no)',
+  `sex`               ENUM('male','female') DEFAULT NULL,
+  `genotype`          ENUM('AA','AS','AC','SS','SC','unknown') DEFAULT NULL,
+  `weight_kg`         DECIMAL(5,1) DEFAULT NULL,
+  `hemoglobin_g_dl`   DECIMAL(4,1) DEFAULT NULL,
+  `bp_systolic`       SMALLINT DEFAULT NULL,
+  `bp_diastolic`      SMALLINT DEFAULT NULL,
+  `pulse_bpm`         SMALLINT DEFAULT NULL,
+  `temperature_c`     DECIMAL(4,1) DEFAULT NULL,
+  `hiv_result`        ENUM('negative','positive','not_tested') NOT NULL DEFAULT 'not_tested',
+  `hbsag_result`      ENUM('negative','positive','not_tested') NOT NULL DEFAULT 'not_tested' COMMENT 'Hepatitis B surface antigen',
+  `hcv_result`        ENUM('negative','positive','not_tested') NOT NULL DEFAULT 'not_tested' COMMENT 'Hepatitis C antibody',
+  `syphilis_result`   ENUM('negative','positive','not_tested') NOT NULL DEFAULT 'not_tested',
+  `malaria_result`    ENUM('negative','positive','not_tested') NOT NULL DEFAULT 'not_tested',
+  `outcome`           ENUM('eligible','temporary_deferral','permanent_deferral') NOT NULL,
+  `deferral_reasons`  VARCHAR(500) DEFAULT NULL COMMENT 'Why the donor was deferred (shown to officers)',
+  `deferred_until`    DATE DEFAULT NULL COMMENT 'Temporary deferral ends on this date',
+  `notes`             VARCHAR(500) DEFAULT NULL,
+  `screened_at`       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`screening_id`),
+  KEY `idx_screening_member` (`member_id`,`source`,`screened_at`),
+  KEY `fk_screening_officer` (`officer_id`),
+  KEY `fk_screening_bank` (`blood_bank_id`),
+  CONSTRAINT `fk_screening_member` FOREIGN KEY (`member_id`)
+    REFERENCES `members` (`member_id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_screening_officer` FOREIGN KEY (`officer_id`)
+    REFERENCES `hospital_workers` (`worker_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_screening_bank` FOREIGN KEY (`blood_bank_id`)
+    REFERENCES `blood_banks` (`bank_id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+  COMMENT='Pre-donation health screenings (self-check and officer screening)';
+
 -- ----------------------------------------------------------- donations ----
 CREATE TABLE `donations` (
   `donation_id`   INT(11) NOT NULL AUTO_INCREMENT,
@@ -180,6 +227,7 @@ CREATE TABLE `donations` (
   `units`         INT(11) NOT NULL DEFAULT 1,
   `donation_date` DATE NOT NULL,
   `status`        ENUM('Pending','Completed','Cancelled') NOT NULL DEFAULT 'Completed',
+  `screening_id`  INT(11) DEFAULT NULL COMMENT 'FK -> donor_screenings.screening_id that cleared the donor',
   `created_at`    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`donation_id`),
   KEY `idx_donations_donor` (`donor_id`),
@@ -187,6 +235,7 @@ CREATE TABLE `donations` (
   KEY `idx_donations_date` (`donation_date`),
   KEY `fk_donation_request` (`request_id`),
   KEY `fk_donation_bank` (`blood_bank_id`),
+  KEY `fk_donation_screening` (`screening_id`),
   CONSTRAINT `fk_donation_donor` FOREIGN KEY (`donor_id`)
     REFERENCES `members` (`member_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_donation_recipient` FOREIGN KEY (`recipient_id`)
@@ -194,7 +243,9 @@ CREATE TABLE `donations` (
   CONSTRAINT `fk_donation_request` FOREIGN KEY (`request_id`)
     REFERENCES `blood_requests` (`request_id`) ON DELETE SET NULL,
   CONSTRAINT `fk_donation_bank` FOREIGN KEY (`blood_bank_id`)
-    REFERENCES `blood_banks` (`bank_id`) ON DELETE SET NULL
+    REFERENCES `blood_banks` (`bank_id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_donation_screening` FOREIGN KEY (`screening_id`)
+    REFERENCES `donor_screenings` (`screening_id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
   COMMENT='Completed blood donations — the real ledger';
 
@@ -243,7 +294,7 @@ CREATE TABLE `notifications` (
   `notification_id` INT(11) NOT NULL AUTO_INCREMENT,
   `recipient_role`  ENUM('admin','officer','member') NOT NULL,
   `recipient_id`    INT(11) NOT NULL,
-  `type`            VARCHAR(30)  NOT NULL COMMENT 'request_new / request_status / donation / emergency / low_stock / member_new / contact / alert',
+  `type`            VARCHAR(30)  NOT NULL COMMENT 'request_new / request_status / donation / screening / emergency / low_stock / member_new / contact / alert',
   `title`           VARCHAR(200) NOT NULL,
   `body`            VARCHAR(500) DEFAULT NULL,
   `link`            VARCHAR(255) DEFAULT NULL COMMENT 'Relative page to open',

@@ -47,6 +47,9 @@ $deadline_ts = ($request && !empty($request['required_within_hours'])) ? strtoti
 $urgency_badge = ['Critical Emergency' => 'bl-badge-red', 'Urgent' => 'bl-badge-amber', 'Normal' => 'bl-badge-blue'];
 $status_badge  = ['Pending' => 'bl-badge-amber', 'Approved' => 'bl-badge-blue', 'Fulfilled' => 'bl-badge-green', 'Cancelled' => 'bl-badge-grey'];
 $available_count = count(array_filter($matching_donors, function ($d) { return !empty($d['is_available']); }));
+// Which listed donors have already passed today's health screening.
+foreach ($matching_donors as &$d) { $d['screened'] = (bool)bl_screening_for_donation($db->connection, $d['donor_id']); }
+unset($d);
 ?>
 <?php include 'inc/header.php'; ?>
 <!DOCTYPE html>
@@ -61,7 +64,7 @@ $available_count = count(array_filter($matching_donors, function ($d) { return !
     <div class="welcome-banner">
       <span class="badge-pill">MATCH A DONOR</span>
       <h1><?= $request ? 'Request #' . (int)$request['request_id'] . ' — ' . htmlspecialchars($request['patient_name']) : 'Match a Donor' ?></h1>
-      <p>Pick a compatible, eligible donor and confirm the units they give. BloodLink re-checks compatibility, the 56-day rule and availability before recording it.</p>
+      <p>Pick a compatible, eligible donor, screen them, and confirm the units they give. BloodLink re-checks compatibility, the 56-day rule, availability and today's health screening before recording it.</p>
     </div>
 
     <?php if ($flash): ?>
@@ -131,7 +134,7 @@ $available_count = count(array_filter($matching_donors, function ($d) { return !
       <div class="bl-card-head">
         <div>
           <h2 class="bl-card-title"><i class="fas fa-users"></i> Eligible &amp; compatible donors</h2>
-          <p class="bl-card-sub">56-day rule applied · ranked available first, then best match<?= $has_request_geo ? ', then nearest to the hospital' : '' ?>. The requester is never listed.</p>
+          <p class="bl-card-sub">56-day rule applied, deferred donors left out · ranked available first, then best match<?= $has_request_geo ? ', then nearest to the hospital' : '' ?>. The requester is never listed.</p>
         </div>
         <div style="display:flex; gap:.5rem; flex-wrap:wrap;">
           <span class="bl-badge bl-badge-green"><?= $available_count ?> available</span>
@@ -148,7 +151,7 @@ $available_count = count(array_filter($matching_donors, function ($d) { return !
               <tr>
                 <th>Donor</th><th>Group</th><th>Match</th><th>Availability</th>
                 <?php if ($has_request_geo): ?><th>Distance</th><?php endif; ?>
-                <th>Last donation</th><th style="text-align:right;">Confirm</th>
+                <th>Last donation</th><th>Screening</th><th style="text-align:right;">Confirm</th>
               </tr>
             </thead>
             <tbody>
@@ -181,9 +184,14 @@ $available_count = count(array_filter($matching_donors, function ($d) { return !
                 <td data-label="Last donation"><?= $donor['last_donation_date']
                     ? '<span>' . htmlspecialchars(date('j M Y', strtotime($donor['last_donation_date']))) . '<span style="display:block; font-size:.75rem; color:#6b7280;">' . (int)$donor['days_since_last_donation'] . ' days ago</span></span>'
                     : '<span style="color:#6b7280;">Never</span>' ?></td>
+                <td data-label="Screening"><?= $donor['screened']
+                    ? '<span class="bl-badge bl-badge-green"><i class="fas fa-stethoscope"></i> Passed today</span>'
+                    : '<span class="bl-badge bl-badge-grey">Not screened today</span>' ?></td>
                 <td class="bl-td-full">
                   <?php if (!$avail): ?>
                     <div class="bl-confirm"><button type="button" class="bl-btn bl-btn-ghost bl-btn-sm" disabled title="This member has marked themselves unavailable">Unavailable</button></div>
+                  <?php elseif (!$donor['screened']): ?>
+                    <div class="bl-confirm"><a href="screen_donor.php?member_id=<?= (int)$donor['donor_id'] ?>&amp;request_id=<?= (int)$request_id ?>" class="bl-btn bl-btn-outline bl-btn-sm"><i class="fas fa-stethoscope"></i> Screen donor</a></div>
                   <?php else: ?>
                     <form method="POST" class="bl-confirm"
                           onsubmit="return confirm('Record ' + this.units.value + ' unit(s) from <?= htmlspecialchars(addslashes($donor['name']), ENT_QUOTES) ?> for this request?');">
