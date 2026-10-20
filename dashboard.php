@@ -80,13 +80,13 @@ include 'inc/navbar.php';
     </div>
 
     <!-- Stock chart -->
-    <div class="quick-card" style="text-align:left; margin-bottom:1.5rem;">
+    <div class="quick-card" style="text-align:left; margin-bottom:1.5rem; height:auto;">
         <h3 style="margin-bottom:1rem;">Current Blood Stock by Group (all banks)</h3>
-        <canvas id="stockChart" height="90"></canvas>
+        <div style="position:relative; height:300px;"><canvas id="stockChart"></canvas></div>
     </div>
 
     <!-- Recent activity -->
-    <div class="quick-card" style="text-align:left;">
+    <div class="quick-card" style="text-align:left; height:auto;">
         <h3 style="margin-bottom:1rem;">Recent Blood Requests</h3>
         <div style="overflow-x:auto;">
         <table style="width:100%; border-collapse:collapse;">
@@ -131,7 +131,7 @@ include 'inc/navbar.php';
             labels: <?php echo json_encode($stock_labels); ?>,
             datasets: [{ label: 'Units available', data: <?php echo json_encode($stock_values); ?>, backgroundColor: '#cc0000' }]
         },
-        options: { responsive: true, plugins: { legend: { display: false } },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
     });
 })();
