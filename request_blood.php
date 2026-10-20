@@ -359,7 +359,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     padding: 0.85rem 0.95rem 1rem;
 }
 
-.rb-section { margin-bottom: 0.75rem; }
+.rb-section { margin-bottom: 0.75rem; padding: 0; }   /* the theme pads every <section> by 7.5rem on wide screens */
 .rb-section:last-of-type { margin-bottom: 0; }
 .rb-section-title {
     font-size: 0.68rem;

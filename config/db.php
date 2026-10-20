@@ -43,6 +43,13 @@ class dbconfig
         // Match the schema's utf8mb4 so multibyte characters (e.g. the en-dash
         // in "Officer – Hospital") don't come back as mojibake.
         mysqli_set_charset($this->connection, 'utf8mb4');
+
+        // PHP and MySQL must agree on the clock, or every deadline countdown and
+        // "x min ago" is off by the difference (PHP defaults to UTC, MySQL to the
+        // machine's zone). Both run on Nigerian time; config.local.php can set
+        // BL_TIMEZONE to override.
+        date_default_timezone_set(defined('BL_TIMEZONE') ? BL_TIMEZONE : 'Africa/Lagos');
+        mysqli_query($this->connection, "SET time_zone = '" . date('P') . "'");
     }
 
     public function check($a)

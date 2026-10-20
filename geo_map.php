@@ -377,9 +377,18 @@ $home_json = json_encode($home, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | J
 
   function geoError(err, highAccuracy){
     if (highAccuracy && err.code !== err.PERMISSION_DENIED) { return getGps(false); }   // retry without GPS hardware (Wi-Fi/IP)
+    // Where the device-level location switch lives, for the user's own system.
+    const ua = navigator.userAgent;
+    const osHint = /Windows/.test(ua)
+      ? 'On Windows, open <b>Settings → Privacy &amp; security → Location</b> and turn on <b>Location services</b> and <b>Let desktop apps access your location</b>.'
+      : /Android|iPhone|iPad/.test(ua)
+        ? 'On a phone, turn on Location and allow it for your browser.'
+        : /Mac/.test(ua)
+          ? 'On a Mac, turn on <b>System Settings → Privacy &amp; Security → Location Services</b> for your browser.'
+          : 'Check that location is turned on in your device settings.';
     const msg = {
-      1: '<b>Location is blocked for this site.</b> Click the icon at the left of the address bar → <b>Location</b> → <b>Allow</b>, then press <b>Use my location</b>.',
-      2: '<b>Your device couldn\'t work out where you are.</b> On a Mac, turn on <b>System Settings → Privacy &amp; Security → Location Services</b> for your browser; on a phone, turn on Location.',
+      1: '<b>Location is blocked.</b> Click the icon at the left of the address bar → <b>Location</b> → <b>Allow</b>, then press <b>Use my location</b>. If it is already allowed there, the device itself may be blocking it: ' + osHint,
+      2: '<b>Your device couldn\'t work out where you are.</b> ' + osHint + ' A desktop PC without Wi-Fi often can\'t be located at all.',
       3: '<b>Finding your location took too long.</b> Press <b>Use my location</b> to try again.'
     }[err.code] || 'Your location is not available.';
     showNotice(msg + ' Meanwhile the map uses ' + fallbackWord + '.');
